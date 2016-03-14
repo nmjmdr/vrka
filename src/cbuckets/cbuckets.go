@@ -6,6 +6,7 @@ import (
 	"flake"
 	"errors"
 	"fmt"
+	"tickerwrap"
 	"time"
 )
 
@@ -13,7 +14,7 @@ const numBuckets = 8
 const factor = 16
 const firstBucketStart = 0
 const firstBucketEnd = 256
-
+const sweepDuration = 1 // in milliseonds
 
 type node struct {
 	id string
@@ -29,8 +30,11 @@ type bucket struct {
 	end uint64
 	head *node
 	tail *node
-	mutex *sync.Mutex	
+	mutex *sync.Mutex
+	tw tickerwrap.Tickerw
 }
+
+type tickerCreator func(d time.Duration) tickerwrap.Tickerw
 
 
 type TimedBuckets struct {
@@ -39,6 +43,7 @@ type TimedBuckets struct {
 	m map[string](*node)
 	flk *flake.Flk
 	mutex *sync.Mutex
+	createTw tickerCreator
 }
 
 func (b *TimedBuckets) setup() {
@@ -50,7 +55,6 @@ func (b *TimedBuckets) setup() {
 	b.buckets[0].start = start
 	b.buckets[0].end = end
 	b.buckets[0].mutex = &sync.Mutex{}
-	
 	for n:=1;n<numBuckets;n++ {
 
 		start = end+1
@@ -59,6 +63,7 @@ func (b *TimedBuckets) setup() {
 		b.buckets[n].start = start
 		b.buckets[n].end = end	
 		b.buckets[n].mutex = &sync.Mutex{}
+		b.buckets[n].tw = b.createTw(sweepDuration*time.Millisecond)		
 	}
 }
 
@@ -71,13 +76,14 @@ func (b *TimedBuckets) newId() string {
 	return string(id)
 }
 
-func NewBuckets() *TimedBuckets {
+func NewBuckets(createTw tickerCreator) *TimedBuckets {
 	b := new(TimedBuckets)
+	b.createTw = createTw
 	b.setup()
 	var err error
 	b.flk,err = flake.FlakeNode()
 	b.m = make(map[string](*node))
-	b.mutex = &sync.Mutex{}
+	b.mutex = &sync.Mutex{}	
 	if err != nil {
 		panic(err)
 	}
@@ -100,45 +106,30 @@ func (b *TimedBuckets) addToBuckets(n *node) {
 	i := 0
 	for ;i<len(b.buckets);i++ {
 		if b.buckets[i].start <= n.after && b.buckets[i].end >= n.after {
-			break
-		
+			break		
 		}
 	}
 
 	// set the node's bucket index
 	n.bucketIndex = i
+	b.buckets[n.bucketIndex].mutex.Lock()
+	b.addToBucket(n)
+	b.buckets[n.bucketIndex].mutex.Unlock()	
+}
 
-	// add to the tail, update the tail
-	// now the conflict that could happen are:
-	// the current tail is getting deleted
-	// another rountine is trying to add another element
-	// at the tail
-	// the tail element is getting moved up a level
-	// we have added the new element, by setting "next", but
-	// before we could set the tail - the timer is trying to move
-	// the element up one level
-
-
-	// to avoid all this we take the lock
-	// at the bucket level 
-	// before inserting a node into it
-	// or before deleting a node from it
-	// or before moving a node one level up
+func (b *TimedBuckets) addToBucket(n *node) {
 	
-	// check if it is nill
-	// try and lock bucket 
-	b.buckets[i].mutex.Lock()
-	if b.buckets[i].tail == nil {	
-		b.buckets[i].tail = n
-		b.buckets[i].head = n	
+
+	if b.buckets[n.bucketIndex].tail == nil {	
+		b.buckets[n.bucketIndex].tail = n
+		b.buckets[n.bucketIndex].head = n	
 		
 	} else {		
-		n.prev = b.buckets[i].tail
-		b.buckets[i].tail.next = n
-		b.buckets[i].tail = n	
+		n.prev = b.buckets[n.bucketIndex].tail
+		b.buckets[n.bucketIndex].tail.next = n
+		b.buckets[n.bucketIndex].tail = n	
 	}
-	b.buckets[i].mutex.Unlock()
-	
+
 }
 
 func (b *TimedBuckets) Add(c howler.Callback, after uint64) (string, error) {
@@ -156,26 +147,13 @@ func (b *TimedBuckets) Add(c howler.Callback, after uint64) (string, error) {
 	return n.id, nil
 }
 
-func (b *TimedBuckets) Del(id string) error {
+func (b *TimedBuckets) disconnectNode(n *node) {
 
-	// get the id
-	b.mutex.Lock()
-	n,ok := b.m[id]
-	b.mutex.Unlock()
-	
-	if !ok {
-		return nil
-	}
-
-	// remove the node
-	b.buckets[n.bucketIndex].mutex.Lock()
-	
 	if n.prev != nil && n.next != nil {	
 		n.prev.next = n.next
 		n.next.prev = n.prev
 		n.next = nil
-		n.prev = nil
-		n = nil	
+		n.prev = nil			
 	} else if n.prev == nil {
 		// we are deleting the head
 		b.buckets[n.bucketIndex].head = n.next
@@ -189,7 +167,23 @@ func (b *TimedBuckets) Del(id string) error {
 		b.buckets[n.bucketIndex].tail = n.prev
 		n.prev.next = nil		
 	}
-	b.buckets[n.bucketIndex].mutex.Unlock()	
+}
+
+func (b *TimedBuckets) Del(id string) error {
+
+	// get the id
+	b.mutex.Lock()
+	n,ok := b.m[id]
+	b.mutex.Unlock()
+	
+	if !ok {
+		return nil
+	}
+
+	// remove the node
+	b.buckets[n.bucketIndex].mutex.Lock()	
+	b.disconnectNode(n)
+	b.buckets[n.bucketIndex].mutex.Unlock()
 	n = nil
 	return nil
 }
@@ -205,16 +199,53 @@ func (b *TimedBuckets) Start() {
 	// bucket[0] is special, we need to generate event for callbacks
 
 	// start a timer for each bucket
-	for i:=1;i<len(b.buckets);i++ {
-		b.buckets[i].ticker = time.NewTicker(time.Millisecond * 1)
+	for i:=0;i<len(b.buckets);i++ {
+		b.buckets[i].tw.Start()
 		go b.tickHandler(i)
-	}
-	
+	}	
 }
 
 
-func (b *TimedBuckets) tickHandler(bucketIndex int) {	
+func (b *TimedBuckets) tickHandler(bucketIndex int) {
+
+	// need to wait on the ticker channel
+	for range b.buckets[bucketIndex].tw.Channel() {
+		if bucketIndex == 0 {
+		} else {
+			// sweep the bucket normally
+			b.sweepBucket(bucketIndex)
+		}
+        }
+}
+
+
+func (b *TimedBuckets) sweepBucket(bIndex int) {
+	
+	// lock the bucket for sweeping
+	b.buckets[bIndex].mutex.Lock()
+	for p := b.buckets[bIndex].head; p!=nil;p=p.next {	
+		// reduce the time by sweep duration
+		p.after = (p.after - sweepDuration)
+		// check if it has to moved
+		if p.after < b.buckets[bIndex].start {
+			b.moveUp(p)
+		}
+	}
+	b.buckets[bIndex].mutex.Unlock()
+}
+
+func (b *TimedBuckets) moveUp(n *node) {
+	
+	b.disconnectNode(n)
+	// move it up one level
+	n.bucketIndex = n.bucketIndex - 1
+	// add the node to new level
+	b.addToBucket(n)
 }
 
 func (b *TimedBuckets) Stop() {
+	// stop the timer for each bucket
+	for i:=1;i<len(b.buckets);i++ {
+		b.buckets[i].tw.Stop()		
+	}
 }

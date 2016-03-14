@@ -4,11 +4,17 @@ import (
 	"testing"
 	"howler"
 	"sync"
+	"tickerwrap"
+	"time"
 )
+
+func createTw(d time.Duration) tickerwrap.Tickerw   {
+	return tickerwrap.NewMockTicker()
+}
 
 
 func TestBucketSetup(t *testing.T) {
-	cb := NewBuckets()
+	cb := NewBuckets(createTw)
 
 	for i:=1;i<len(cb.buckets);i++ {
 		end := (cb.buckets[i].start-1)*factor
@@ -21,7 +27,7 @@ func TestBucketSetup(t *testing.T) {
 
 func TestTailSet(t *testing.T) {
 	
-	b := NewBuckets()
+	b := NewBuckets(createTw)
 	cb := howler.Callback{}
 	cb.Uri = "uri"
 	cb.Payload = "payload"
@@ -35,7 +41,7 @@ func TestTailSet(t *testing.T) {
 
 func TestTailSetParallel(t *testing.T) {
 	
-	b := NewBuckets()
+	b := NewBuckets(createTw)
 	cb := howler.Callback{}
 	cb.Uri = "uri"
 	cb.Payload = "payload"
@@ -98,7 +104,7 @@ func TestTailSetParallel(t *testing.T) {
 }
 
 func createWithAllBucketsSet(t *testing.T) (*TimedBuckets,[]string) {
-	b := NewBuckets()
+	b := NewBuckets(createTw)
 	cb := howler.Callback{}
 	cb.Uri = "uri"
 	cb.Payload = "payload"
@@ -146,7 +152,7 @@ func TestDelete(t *testing.T) {
 
 func TestAddDelParallel(t *testing.T) {
 
-	b := NewBuckets()
+	b := NewBuckets(createTw)
 	perBucket := 1000
 	ids := make([]string,len(b.buckets)*perBucket)
 
