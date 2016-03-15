@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+
 func createTw(d time.Duration) tickerwrap.Tickerw   {
 	return tickerwrap.NewMockTicker()
 }
@@ -17,7 +18,7 @@ func TestBucketSetup(t *testing.T) {
 	cb := NewBuckets(createTw)
 
 	for i:=1;i<len(cb.buckets);i++ {
-		end := (cb.buckets[i].start-1)*factor
+		end := (cb.buckets[i].start-1)*uint64(cb.factor)
 		if end != cb.buckets[i].end {
 			t.Fail()
 		}
@@ -213,5 +214,49 @@ func count(b *TimedBuckets) int {
 		}
 	}
 	return count
+}
+
+func TestMoveUp(t *testing.T) {
+
+	ticker := tickerwrap.NewMockTicker()
+	f := func(d time.Duration) tickerwrap.Tickerw {	
+		return ticker
+	}
+
+	b := NewBucketsCustomLevels(f,8,2)
+
+	// add to the last bucket
+	after := b.buckets[len(b.buckets)-1].start + uint64(1)
+	cb := howler.Callback{}
+	cb.Uri = "uri"
+	cb.Payload = "payload"
+	b.Add(cb,after)
+	
+	// check if it got added
+	if b.buckets[len(b.buckets)-1].head == nil {
+		t.Fail()
+	}
+
+	// start the TimedBuckets
+	b.Start() 
+	// have a test where we do this before adding ??
+
+	//keep ticking until the the item moves to bucket[0]
+	//count := 0
+
+	mockTicker,ok := ticker.(*tickerwrap.MockTicker)
+	if !ok {
+		t.Fatal("failed to convert to MockTicker")
+	}
+
+	for b.buckets[0].head == nil  {		
+		mockTicker.Tick()
+		//count++
+	}
+
+	if b.buckets[0].head == nil {
+		t.Fatal("head at bucket 0 is not set")
+	}
+
 }
 

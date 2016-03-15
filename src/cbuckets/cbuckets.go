@@ -10,11 +10,13 @@ import (
 	"time"
 )
 
+/*
 const numBuckets = 8
 const factor = 16
 const firstBucketStart = 0
 const firstBucketEnd = 256
 const sweepDuration = 1 // in milliseonds
+*/
 
 type node struct {
 	id string
@@ -44,26 +46,41 @@ type TimedBuckets struct {
 	flk *flake.Flk
 	mutex *sync.Mutex
 	createTw tickerCreator
+
+	// bucket levels and other factors
+	numBuckets int //default: 8
+	factor int //default 16
+	firstBucketStart int //default 0
+	firstBucketEnd int //default : 256
+	sweepDuration int // default: 1 in milliseonds	
+}
+func (b *TimedBuckets) setDefaults() {
+	// bucket levels and other factors
+	b.numBuckets = 8       //default: 8
+	b.factor =16           //default 16
+	b.firstBucketStart = 0 //default 0
+	b.firstBucketEnd = 256 //default : 256
+	b.sweepDuration = 1    // default: 1 in milliseonds
 }
 
 func (b *TimedBuckets) setup() {
-	b.buckets = make([]bucket,numBuckets)
+	b.buckets = make([]bucket,b.numBuckets)
 
-	start := uint64(firstBucketStart)
-	end := uint64(firstBucketEnd)
+	start := uint64(b.firstBucketStart)
+	end := uint64(b.firstBucketEnd)
 
 	b.buckets[0].start = start
 	b.buckets[0].end = end
 	b.buckets[0].mutex = &sync.Mutex{}
-	for n:=1;n<numBuckets;n++ {
+	b.buckets[0].tw = b.createTw(time.Duration(b.sweepDuration)*time.Millisecond)
 
+	for n:=1;n<b.numBuckets;n++ {
 		start = end+1
-		end = end * factor
-
+		end = end * uint64(b.factor)
 		b.buckets[n].start = start
 		b.buckets[n].end = end	
 		b.buckets[n].mutex = &sync.Mutex{}
-		b.buckets[n].tw = b.createTw(sweepDuration*time.Millisecond)		
+		b.buckets[n].tw = b.createTw(time.Duration(b.sweepDuration)*time.Millisecond)		
 	}
 }
 
@@ -78,6 +95,22 @@ func (b *TimedBuckets) newId() string {
 
 func NewBuckets(createTw tickerCreator) *TimedBuckets {
 	b := new(TimedBuckets)
+	b.setDefaults()
+	ctor(createTw,b)
+	return b
+}
+
+
+func NewBucketsCustomLevels(createTw tickerCreator,numBuckets int, factor int) *TimedBuckets {
+	b := new(TimedBuckets)
+	b.setDefaults()
+	b.factor = factor
+	b.numBuckets = numBuckets
+	ctor(createTw,b)
+	return b
+}
+
+func ctor(createTw tickerCreator, b *TimedBuckets) {
 	b.createTw = createTw
 	b.setup()
 	var err error
@@ -87,8 +120,9 @@ func NewBuckets(createTw tickerCreator) *TimedBuckets {
 	if err != nil {
 		panic(err)
 	}
-	return b
 }
+
+
 
 func (b *TimedBuckets) newNode(c *howler.Callback,after uint64) *node {
 
@@ -199,7 +233,7 @@ func (b *TimedBuckets) Start() {
 	// bucket[0] is special, we need to generate event for callbacks
 
 	// start a timer for each bucket
-	for i:=0;i<len(b.buckets);i++ {
+	for i:=0;i<len(b.buckets);i++ {			
 		b.buckets[i].tw.Start()
 		go b.tickHandler(i)
 	}	
@@ -209,13 +243,22 @@ func (b *TimedBuckets) Start() {
 func (b *TimedBuckets) tickHandler(bucketIndex int) {
 
 	// need to wait on the ticker channel
-	for range b.buckets[bucketIndex].tw.Channel() {
+	for range b.buckets[bucketIndex].tw.Channel() {		
 		if bucketIndex == 0 {
+			b.checkForExpiry()
 		} else {
 			// sweep the bucket normally
 			b.sweepBucket(bucketIndex)
 		}
+		
         }
+}
+func (b *TimedBuckets) checkForExpiry() {
+	// lock the bucket for sweeping
+	b.buckets[0].mutex.Lock()
+	for p := b.buckets[0].head; p != nil p = p.next {
+		
+	}
 }
 
 
@@ -225,7 +268,7 @@ func (b *TimedBuckets) sweepBucket(bIndex int) {
 	b.buckets[bIndex].mutex.Lock()
 	for p := b.buckets[bIndex].head; p!=nil;p=p.next {	
 		// reduce the time by sweep duration
-		p.after = (p.after - sweepDuration)
+		p.after = (p.after - uint64(b.sweepDuration))
 		// check if it has to moved
 		if p.after < b.buckets[bIndex].start {
 			b.moveUp(p)
