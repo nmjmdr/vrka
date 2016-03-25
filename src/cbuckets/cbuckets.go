@@ -10,14 +10,6 @@ import (
 	"time"
 )
 
-/*
-const numBuckets = 8
-const factor = 16
-const firstBucketStart = 0
-const firstBucketEnd = 256
-const sweepDuration = 1 // in milliseonds
-*/
-
 type node struct {
 	id string
 	c *howler.Callback
@@ -40,7 +32,7 @@ type tickerCreator func(d time.Duration) tickerwrap.Tickerw
 
 
 type TimedBuckets struct {
-	c  (<-chan howler.Callback)
+	c  chan howler.Callback
 	buckets []bucket
 	m map[string](*node)
 	flk *flake.Flk
@@ -120,6 +112,7 @@ func ctor(createTw tickerCreator, b *TimedBuckets) {
 	if err != nil {
 		panic(err)
 	}
+	b.c = make(chan howler.Callback)
 }
 
 
@@ -181,7 +174,9 @@ func (b *TimedBuckets) Add(c howler.Callback, after uint64) (string, error) {
 	return n.id, nil
 }
 
-func (b *TimedBuckets) disconnectNode(n *node) {
+func (b *TimedBuckets) disconnectNode(n *node) *node  {
+
+	holdNext := n.next
 
 	if n.prev != nil && n.next != nil {	
 		n.prev.next = n.next
@@ -201,6 +196,7 @@ func (b *TimedBuckets) disconnectNode(n *node) {
 		b.buckets[n.bucketIndex].tail = n.prev
 		n.prev.next = nil		
 	}
+	return holdNext
 }
 
 func (b *TimedBuckets) Del(id string) error {
@@ -255,10 +251,23 @@ func (b *TimedBuckets) tickHandler(bucketIndex int) {
 }
 func (b *TimedBuckets) checkForExpiry() {
 	// lock the bucket for sweeping
+	
 	b.buckets[0].mutex.Lock()
-	for p := b.buckets[0].head; p != nil p = p.next {
-		
+	
+	for p := b.buckets[0].head; p != nil ; {
+		// reduce the time
+		p.after = (p.after - uint64(b.sweepDuration))
+		// check for expiry
+		if p.after <= 0 {
+			// publish
+			b.c <- (*p.c)	
+			// delete and set the next one to check
+			p  = b.disconnectNode(p)
+		} else {
+			p = p.next
+		}
 	}
+	b.buckets[0].mutex.Unlock()
 }
 
 
@@ -266,24 +275,29 @@ func (b *TimedBuckets) sweepBucket(bIndex int) {
 	
 	// lock the bucket for sweeping
 	b.buckets[bIndex].mutex.Lock()
-	for p := b.buckets[bIndex].head; p!=nil;p=p.next {	
+	
+	for p := b.buckets[bIndex].head; p!=nil; {	
 		// reduce the time by sweep duration
 		p.after = (p.after - uint64(b.sweepDuration))
 		// check if it has to moved
 		if p.after < b.buckets[bIndex].start {
-			b.moveUp(p)
+			// move up and set the next one to sweep
+			p = b.moveUp(p)
+		} else {
+			p = p.next
 		}
 	}
 	b.buckets[bIndex].mutex.Unlock()
 }
 
-func (b *TimedBuckets) moveUp(n *node) {
+func (b *TimedBuckets) moveUp(n *node) *node {
 	
-	b.disconnectNode(n)
+	next := b.disconnectNode(n)
 	// move it up one level
 	n.bucketIndex = n.bucketIndex - 1
 	// add the node to new level
 	b.addToBucket(n)
+	return next
 }
 
 func (b *TimedBuckets) Stop() {

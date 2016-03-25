@@ -248,10 +248,11 @@ func TestMoveUp(t *testing.T) {
 	if !ok {
 		t.Fatal("failed to convert to MockTicker")
 	}
-
-	for b.buckets[0].head == nil  {		
+	
+	numTicks := (b.buckets[(len(b.buckets))-1].end + 1)
+	for b.buckets[0].head == nil && numTicks >=0  {		
 		mockTicker.Tick()
-		//count++
+		numTicks = numTicks - 1
 	}
 
 	if b.buckets[0].head == nil {
@@ -259,4 +260,68 @@ func TestMoveUp(t *testing.T) {
 	}
 
 }
+
+
+func TestMoveUpAddParallel(t *testing.T) {
+	
+	
+	ticker := tickerwrap.NewMockTicker()
+	f := func(d time.Duration) tickerwrap.Tickerw {	
+		return ticker
+	}
+
+	b := NewBucketsCustomLevels(f,8,2)
+
+	// add to the last bucket
+	cb := howler.Callback{}
+	cb.Uri = "uri"
+	cb.Payload = "payload"
+
+	// start it
+	b.Start()
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// keep adding at last level
+	go func() {
+		// start adding in parallel
+		last := len(b.buckets)-1
+		for i:=0;i<10;i++ {
+			b.Add(cb,b.buckets[last].start + uint64(1 + i))
+			
+		}
+		wg.Done()
+	}()
+
+	// we are adding timers in the range of
+	// buckets[last].start to buckets[last].start+10
+	// all these should expire within a worst
+	// case of buckets[last].end
+	
+	mockTicker,ok := ticker.(*tickerwrap.MockTicker)
+	if !ok {
+		t.Fatal("failed to convert to MockTicker")
+	}
+	
+	ticks := b.buckets[(len(b.buckets))-1].end*2	
+	go func() {
+		for i:=uint64(0);i<ticks;i++ {
+			mockTicker.Tick()
+		}
+		wg.Done()
+	}()
+	wg.Wait()
+
+	if b.buckets[0].head != nil {
+		t.Fail()
+	}
+	
+}
+
+
+
+
+
+
 

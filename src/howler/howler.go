@@ -1,6 +1,5 @@
 package howler
 
-
 type Callback struct {
 	Uri     string
 	Payload string
