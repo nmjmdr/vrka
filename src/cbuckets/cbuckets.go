@@ -239,7 +239,7 @@ func (b *TimedBuckets) Start() {
 func (b *TimedBuckets) tickHandler(bucketIndex int) {
 
 	// need to wait on the ticker channel
-	for range b.buckets[bucketIndex].tw.Channel() {		
+	for range b.buckets[bucketIndex].tw.Channel() {			
 		if bucketIndex == 0 {
 			b.checkForExpiry()
 		} else {
@@ -255,7 +255,7 @@ func (b *TimedBuckets) checkForExpiry() {
 	b.buckets[0].mutex.Lock()
 	
 	for p := b.buckets[0].head; p != nil ; {
-		// reduce the time
+		// reduce the time		
 		p.after = (p.after - uint64(b.sweepDuration))
 		// check for expiry
 		if p.after <= 0 {
@@ -294,7 +294,7 @@ func (b *TimedBuckets) moveUp(n *node) *node {
 	
 	next := b.disconnectNode(n)
 	// move it up one level
-	n.bucketIndex = n.bucketIndex - 1
+	n.bucketIndex = n.bucketIndex - 1	
 	// add the node to new level
 	b.addToBucket(n)
 	return next
