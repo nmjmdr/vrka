@@ -371,7 +371,7 @@ func TestAddParallelHowls(t *testing.T) {
 	wg.Add(1)
 
 	go func() {
-		for i:=0;i<len(b.buckets);i++ {			
+		for i:=0;i<;i++ {			
 			<-b.Howls()
 			t.Log("Howl");
 		}
