@@ -310,7 +310,7 @@ func TestHowl(t *testing.T) {
 	
 	ticks := b.buckets[0].end
 	for i:=uint64(0);i<ticks;i++ {
-			mockTicker.Tick()
+		mockTicker.Tick()
 	}
 
 	wg.Wait()
@@ -353,33 +353,4 @@ func TestHowlN(t *testing.T) {
 
 	wg.Wait()
 }
-
-func TestAddParallelHowls(t *testing.T) {
-	
-	f := func(d time.Duration) tickerwrap.Tickerw {	
-		return tickerwrap.NewMockTicker()
-	}
-
-	b := NewBucketsCustomLevels(f,8,2)
-
-	// add to the last bucket
-	cb := howler.Callback{}
-	cb.Uri = "uri"
-	cb.Payload = "payload"
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	go func() {
-		for i:=0;i<len(b.buckets);i++ {			
-			<-b.Howls()
-			t.Log("Howl");
-		}
-		wg.Done()
-	}()
-
-}
-
-
-
 
