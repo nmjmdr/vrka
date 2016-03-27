@@ -4,9 +4,10 @@ import (
 	"vrka"
 	"net"
 	"fmt"
-	"bufio"
 	"os"
 	"strings"
+	"errors"
+	"strconv"
 )
 
 
@@ -27,9 +28,8 @@ func main() {
 	
 	v := vrka.New()
  
-	for {
-		// Listen for an incoming connection.
-		conn, err := l.Accept()
+	for {		
+		conn, err := ln.Accept()
 		if err != nil {
 			fmt.Println("Error accepting: ", err.Error())
 			os.Exit(1)
@@ -38,10 +38,16 @@ func main() {
 	}	
 }
 
-// Handles incoming requests.
 func handleRequest(conn net.Conn,v vrka.Vrka) {
-	msg, _ := bufio.NewReader(conn).ReadString('\r\n')     
-	smsg := string(msg)  
+
+	buf := make([]byte, 1024)  
+	n, err := conn.Read(buf)
+	
+	if err != nil || n == 0 {
+		conn.Close()
+		return
+	}
+	smsg := string(buf[0:n])
 
 	sp := strings.Fields(smsg)
 	if sp == nil || len(sp) < 2 {
@@ -50,13 +56,12 @@ func handleRequest(conn net.Conn,v vrka.Vrka) {
 		return
 	}
 
-	response := ""
-	var err error
+	response := ""	
 	err = nil
-	if sp[0] == "+" && len(sp) == 4 {
-		response,err = handleAdd(sp[1],sp[2],sp[3],v)		
+	if sp[0] == "+" && len(sp) == 3 {
+		response,err = handleAdd(sp[1],sp[2],v)		
 	} else if sp[1] == "-" && len(sp) == 2 {
-		err = handleDel(sp[1],sp[2].v)		
+		err = handleDel(sp[1],v)		
 	} else {
 		err = errors.New("Bad request")
 	}
@@ -71,15 +76,16 @@ func handleRequest(conn net.Conn,v vrka.Vrka) {
 	conn.Write([]byte(reply))	 
 	conn.Close()	
 }
-
-
-func handleAdd(afterms string, uri string,payload string, v vrka.Vrka) (string,error) {
+// not considering the payload for now
+// assuming that the server would do 
+// a GET request
+func handleAdd(afterms string, uri string, v vrka.Vrka) (string,error) {
 	
 	u, err := strconv.ParseUint(afterms, 10, 64)
 	if err != nil {
 		return "", err
 	}
-	id,err := v.Add(uri,payload,u)
+	id,err := v.Add(uri,"",u)
 	return id, err
 }
 
