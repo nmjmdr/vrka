@@ -5,8 +5,7 @@ import (
 	"queue"
 	"flake"
 	"time"
-	"tickerwrap"
-	"fmt"
+	"tickerwrap"	
 )
 
 const qFactor = 2
@@ -64,8 +63,7 @@ func (s *qServer) Add(afterms uint64,uri string) string {
 func nanoTimeStamp(ms uint64) uint64 {
 	//ms := nano / (int64(time.Millisecond)/int64(time.Nanosecond))
 	nanoAfter :=  ms * uint64(int64(time.Millisecond)/int64(time.Nanosecond))
-
-	fmt.Printf("at : %d\n",uint64(time.Now().UnixNano()) + nanoAfter)
+	
 	return uint64(time.Now().UnixNano()) + nanoAfter
 }
 
@@ -80,8 +78,7 @@ func (s *qServer) tickHandler() {
 	// need to wait on the ticker channel
 	for range s.tw.Channel() {
 		r,f := s.q.GetMinInRange(0,uint64(time.Now().UnixNano()))
-		if f {
-			fmt.Printf("got: %s",r.Payload)
+		if f {			
 			s.remc <- r
 		}
         }

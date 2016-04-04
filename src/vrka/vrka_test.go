@@ -9,7 +9,7 @@ import (
 
 
 
-func Test_SimpleAdd(t *testing.T) {
+func Test_Add(t *testing.T) {
 	
 	d := 1 * time.Millisecond
 
@@ -48,7 +48,6 @@ func Test_SimpleAdd(t *testing.T) {
 	}
 
 	c.Stop()
-	
 	
 }
 
