@@ -3,7 +3,7 @@ package vrka
 import (	
 	"net/http"
 	"fmt"
-	"time"
+	"time"	
 )
 
 
@@ -11,7 +11,7 @@ type Caller interface {
 	Call(uri string)
 }
 
-const timeoutMs = 25
+const timeoutMs = 200
 
 type httpCaller struct {
 	okCh chan bool
@@ -26,7 +26,7 @@ func NewCaller() Caller {
 }
 
 // Probably a need a better way to perform these operations
-// should not be waiting for 25 ms for a timeout
+// should not be waiting for "x" ms for a timeout
 // it possible to do a one-way call kind of semantics
 // end the momemt the first byte is received?
 func (h *httpCaller) Call(uri string) {
@@ -36,14 +36,16 @@ func (h *httpCaller) Call(uri string) {
 	// upon timeout we can insert the request to a failed queue
 	
 	go func() {
-		// print diagnostic message
+		// print diagnostic message		
 		fmt.Printf("get: %s - ",uri)
-		resp, err := http.Get(uri)
-		resp.Body.Close()
+		resp, err := http.Get(uri)		
 		if err != nil {
 			h.errCh <- err
 		} else {
 			h.okCh <- true
+		}
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
 		}
 	}()
 
@@ -51,8 +53,9 @@ func (h *httpCaller) Call(uri string) {
 	case <-h.okCh:
 		fmt.Println("ok")
 	case e:=<-h.errCh:
-		fmt.Println(e)
+		fmt.Println(e)	
 	case <-time.After(timeoutMs * time.Millisecond):
 		fmt.Println("timed out")
+
 	}
 }

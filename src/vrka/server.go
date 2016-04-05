@@ -5,7 +5,8 @@ import (
 	"queue"
 	"flake"
 	"time"
-	"tickerwrap"	
+	"tickerwrap"
+	"fmt"
 )
 
 const qFactor = 2
@@ -38,6 +39,7 @@ func NewServer(c CreateTicker,tickerInterval time.Duration) CallbackServer {
 	s.stop = make(chan bool)
 	s.remc = make(chan (*common.Reminder))
 	s.tw = c(tickerInterval)
+	s.tw.Start()
 	return s
 }
 
@@ -57,6 +59,7 @@ func (s *qServer) Add(afterms uint64,uri string) string {
 	// nano - the value of UniNano after "x" ms from
 	// current UnixNamo value
 	s.q.Add(nano,r)
+	fmt.Printf("Added callback at: %d\n",nano)
 	return id
 }
 
@@ -76,7 +79,7 @@ func (s *qServer) Channel() <-chan (*common.Reminder) {
 func (s *qServer) tickHandler() {
 
 	// need to wait on the ticker channel
-	for range s.tw.Channel() {
+	for range s.tw.Channel() {	
 		r,f := s.q.GetMinInRange(0,uint64(time.Now().UnixNano()))
 		if f {			
 			s.remc <- r

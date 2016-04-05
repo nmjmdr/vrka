@@ -9,7 +9,7 @@ import (
 	"errors"
 	"strconv"
 	"tickerwrap"
-	"time"
+	"time"	
 )
 
 func main() {
@@ -23,12 +23,12 @@ func main() {
 
 	portString := ":"+port
 
-	fmt.Printf("starting vrka on %s",port)
+	fmt.Printf("Starting vrka on %s...",port)
 	
-	ln, _ := net.Listen("tcp", portString)
-
+	
 	timeIntervalMs := 1*time.Millisecond
 	v := vrka.NewServer(tickerwrap.NewBuiltInTicker,timeIntervalMs)
+	v.Start()
 
 	// start a routine to wait on the callbacks
 	go func() {
@@ -41,6 +41,11 @@ func main() {
 		}
 	}()
 
+
+	fmt.Println("Started")
+	
+	ln, _ := net.Listen("tcp", portString)
+
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -50,6 +55,12 @@ func main() {
 		go handleRequest(conn,v)
 	}
 }
+
+/**************************************************************
+Protocol:
+Add a callback:           +\r\nTime Interval in ms\r\nUri
+Del an existing callback: -\r\nid (currently not supported)
+**************************************************************/
 
 func handleRequest(conn net.Conn,v vrka.CallbackServer) {
 
