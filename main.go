@@ -42,7 +42,7 @@ func main() {
 	}()
 
 
-	fmt.Println("Started")
+	fmt.Println("\nStarted")
 	
 	ln, _ := net.Listen("tcp", portString)
 

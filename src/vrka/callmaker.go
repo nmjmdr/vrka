@@ -11,17 +11,12 @@ type Caller interface {
 	Call(uri string)
 }
 
-const timeoutMs = 200
+const timeoutMs = 10000
 
-type httpCaller struct {
-	okCh chan bool
-	errCh chan error
+type httpCaller struct {	
 }
 
 func NewCaller() Caller {
-	h := new(httpCaller)
-	h.okCh = make(chan bool)
-	h.errCh = make(chan error)
 	return new(httpCaller)
 }
 
@@ -34,28 +29,36 @@ func (h *httpCaller) Call(uri string) {
 	// make the call and wait for
 	// response or a timeout
 	// upon timeout we can insert the request to a failed queue
+	timeoutCh := make(chan bool)
+	errCh := make(chan error)
+	okCh := make(chan bool)
 	
 	go func() {
 		// print diagnostic message		
-		fmt.Printf("get: %s - ",uri)
+		fmt.Printf("GET : %s - ",uri)
+		
 		resp, err := http.Get(uri)		
 		if err != nil {
-			h.errCh <- err
-		} else {
-			h.okCh <- true
+			errCh <- err
+		} else {		
+			okCh <- true
 		}
 		if resp != nil && resp.Body != nil {
 			resp.Body.Close()
 		}
 	}()
 
-	select {
-	case <-h.okCh:
-		fmt.Println("ok")
-	case e:=<-h.errCh:
-		fmt.Println(e)	
-	case <-time.After(timeoutMs * time.Millisecond):
-		fmt.Println("timed out")
+	go func() {
+		time.Sleep(timeoutMs * time.Millisecond)
+		timeoutCh <- true
+	}()
 
+	select {
+	case <-okCh:
+		fmt.Println("ok")
+	case e:=<-errCh:
+		fmt.Println(e)	
+	case <-timeoutCh:
+		fmt.Println("timed out")
 	}
 }
