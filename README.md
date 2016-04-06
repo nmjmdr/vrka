@@ -28,6 +28,19 @@ Vrka has to maintain the callbacks to be invoked, and invoke them after the sche
 A viable alternative is to use a monotonic counter (In GO: UnixNano())
 
 
+Using UnixNano() we can follow this scheme to represent time and invoke the callbacks when the time interval expires:
+
+> [ Every “x” ms check if any of the callbacks have the same or a lesser when counter as current counter ] 
+>                                          
+>  -----------------------|--------|-------|-------|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|----------------------- 
+> At counter = 1000000000000> 
+> Add [time interval ms=5, uri]
+> Record - Callback [ when counter = [1000000000000 + 5000000]
+> At the fifth bar, Current counter will be 1000005000000, then invoke the URI
+
+
+
+
 
 
 	 
