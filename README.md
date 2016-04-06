@@ -44,6 +44,30 @@ Using UnixNano() we can follow this scheme to represent time and invoke the call
 
 
 
+**Multi-Queues**
+
+I have used “[Multi Queues](http://arxiv.org/pdf/1411.1209.pdf)” to implement the priority queue holding the callbacks. 
+
+
+Multi queues implementation has to modified to support a “Get Min in a range”. We need this to check if the any of callbacks have actually expired, given the current counter value. 
+
+
+For example:
+
+ 1. If the current counter value is 1000
+ 2. The callback with the lowest time interval expires at “2000”
+ 3. Then we should not be deleting any value from the priority queue
+ 4. But we should be deleting an entry (\entries), only if there is entry with time interval that expires at 1000 or less
+ 
+
+ 
+ 
+
+
+
+
+
+
 
 
 
