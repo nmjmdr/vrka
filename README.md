@@ -73,5 +73,7 @@ Every RAFT cluster elects a leader, the leader is responsible to ensure that:
 
 We can ensure “only once delivery” by:  Making only the leader responsible for invoking the callbacks; The callback expiry at follower nodes is ignored
 
+Slides at: https://docs.google.com/presentation/d/1knRp3ADbbQcdBYH0r5JD97Qavhp7rMQq1Q5brDTCYGY/edit?usp=sharing
+
 
 	 
