@@ -33,9 +33,13 @@ Using UnixNano() we can follow this scheme to represent time and invoke the call
 > [ Every “x” ms check if any of the callbacks have the same or a lesser when counter as current counter ] 
 >                                          
 >  -----------------------|--------|-------|-------|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|----------------------- 
+> 
 > At counter = 1000000000000> 
+> 
 > Add [time interval ms=5, uri]
-> Record - Callback [ when counter = [1000000000000 + 5000000]
+>
+>Record - Callback [ when counter = [1000000000000 + 5000000]
+> 
 > At the fifth bar, Current counter will be 1000005000000, then invoke the URI
 
 
