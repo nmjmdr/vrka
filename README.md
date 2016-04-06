@@ -58,17 +58,20 @@ For example:
  2. The callback with the lowest time interval expires at “2000”
  3. Then we should not be deleting any value from the priority queue
  4. But we should be deleting an entry (\entries), only if there is entry with time interval that expires at 1000 or less
- 
-
- 
- 
 
 
+**Designing for fault tolerance**
+
+I am planning to use RAFT protocol (this part of the code is yet to be implemented) to ensure fault tolerance.
+
+Every RAFT cluster elects a leader, the leader is responsible to ensure that:
 
 
+ - The log is replicated across the majority of nodes
+ - Majority of the nodes have applied the log to their “state”
 
 
-
+We can ensure “only once delivery” by:  Making only the leader responsible for invoking the callbacks; The callback expiry at follower nodes is ignored
 
 
 	 
