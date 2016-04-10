@@ -1,6 +1,5 @@
 package raft
 
-
 type RaftNode interface {
 }
 
@@ -26,9 +25,14 @@ type node struct {
 	logStore LogStore
 }
 
-func NewRaftNode(peerStore PeerStore,stateStore StateStore,trans Transport,logStore LogStore) RaftNode {
-
+func NewRaftNode(nodeId string,
+	peerStore PeerStore,
+	stateStore StateStore,
+	trans Transport,
+	logStore LogStore) RaftNode {
+	
 	n := new(node)
+	n.id = nodeId
 	n.peerStore = peerStore
 	n.stateStore = stateStore
 	n.trans = trans
@@ -37,6 +41,10 @@ func NewRaftNode(peerStore PeerStore,stateStore StateStore,trans Transport,logSt
 	// start with Follower Role
 	n.role = Follower
 	return n
+}
+
+func (n *node) loadPeers() {
+	n.peers = n.peerStore.Get()
 }
 
 
