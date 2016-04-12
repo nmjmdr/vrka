@@ -1,4 +1,5 @@
 
+
 package tickerwrap
 
 import (
@@ -22,6 +23,8 @@ func NewBuiltInTicker(d time.Duration) Tickerw {
 	b.d = d
 	return b
 }
+
+
 
 func (b *BuiltInTicker) Start() {
 	b.t = time.NewTicker(b.d)
@@ -61,3 +64,4 @@ func (m *MockTicker) Stop() {
 func (m *MockTicker) Tick() {
 	m.c <- time.Time{}
 }
+

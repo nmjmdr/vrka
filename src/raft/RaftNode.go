@@ -11,6 +11,8 @@ const (
 	Follower Role = 3
 )
 
+
+
 type node struct {
 	id string
 	role Role
@@ -38,9 +40,19 @@ func NewRaftNode(nodeId string,
 	n.trans = trans
 	n.logStore = logStore
 
+
+	n.setup()
+	
+	return n
+}
+
+
+
+
+func (n *node) setup() {
 	// start with Follower Role
 	n.role = Follower
-	return n
+	n.loadPeers()
 }
 
 func (n *node) loadPeers() {
