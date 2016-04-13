@@ -2,6 +2,7 @@ package timerwrap
 
 import (
 	"time"
+	"fmt"
 )
 
 type TimerWrap interface {
@@ -17,6 +18,7 @@ type builtInTimer struct {
 
 func NewTimer(d time.Duration) TimerWrap {
 	b := new(builtInTimer)
+	fmt.Println("Called builtin timer")
 	b.t = time.NewTimer(d)
 	return b
 }
@@ -26,7 +28,7 @@ func (b *builtInTimer) Channel() (<-chan time.Time) {
 }
 
 func (b *builtInTimer) Stop() {
-	b.t.Stop()
+	b.t.Stop()	
 }
 
 func (b *builtInTimer) Reset(d time.Duration) bool {
@@ -49,9 +51,11 @@ func (m *MockTimer) Channel() (<-chan time.Time) {
 }
 
 func (m *MockTimer) Stop() {
+	close(m.c)
 }
 
 func (m *MockTimer) Tick() {
+	fmt.Println("tick")
 	m.c <- time.Time{}
 }
 
