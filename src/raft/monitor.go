@@ -11,7 +11,7 @@ const MaxTimeout = 300
 type Monitor interface {	
 	Stop() bool
 	ElectionNotice() (<-chan time.Time)
-	Heartbeat()
+	Reset()
 }
 
 type monitor struct {
@@ -37,6 +37,6 @@ func (m *monitor) ElectionNotice() (<-chan time.Time) {
 	return m.timer.C
 }
 
-func (m *monitor) Heartbeat() {
+func (m *monitor) Reset() {
 	m.timer.Reset(time.Duration(m.timeout) * time.Millisecond)	
 }
