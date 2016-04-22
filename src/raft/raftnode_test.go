@@ -26,7 +26,7 @@ func Test_CandidateTransition(t *testing.T) {
 	// make it a buffered channel
 	monitor.c = make(chan time.Time)
 	
-	node := NewRaftNode("id",monitor)
+	node := NewRaftNode("id",monitor,nil,nil)
 	// signal it
 	monitor.c <- time.Time{}
 	
@@ -42,7 +42,7 @@ func Test_CandiateToFollower(t *testing.T) {
 	// make it a buffered channel
 	monitor.c = make(chan time.Time)
 	
-	node := NewRaftNode("id",monitor)
+	node := NewRaftNode("id",monitor,nil,nil)
 	// signal it]
 	
 	monitor.c <- time.Time{}	
@@ -59,7 +59,7 @@ func Test_CandiateToFollower(t *testing.T) {
 	beat := Beat{}
 	node.Heartbeat(beat)
 
-		time.Sleep(2 * time.Millisecond)
+	time.Sleep(2 * time.Millisecond)
 	
 	// sleep so that we give a chance for the node to transition to
 	// to a follower
