@@ -6,14 +6,11 @@ type follower struct {
 
 
 func (f *follower) onElectionNotice(r *raftNode) state {
-	// change from follower to candidate
-	// start the election process
-
 	//change role to candidate
 	r.mutex.Lock()
 	r.role = Candidate
 	r.mutex.Unlock()
-	c := new(candidate)	
+	c := NewCandidate(r)	
 	return c
 }
 

@@ -41,9 +41,9 @@ type raftNode struct {
 	role Role
 	leader Peer
 	votedFor string
-	config *Config
+	config Config
 	currentTerm uint32
-	campaign Campaign
+	transport Transport
 
 	mutex *sync.Mutex
 	monitor Monitor
@@ -58,14 +58,14 @@ type raftNode struct {
 
 
 
-func NewRaftNode(id string,monitor Monitor,config *Config,campaign Campaign) RaftNode {
+func NewRaftNode(id string,monitor Monitor,config Config,transport Transport) RaftNode {
 	r := new(raftNode)
 	r.id = id
 	// start in follower role
 	r.role = Follower
 	r.mutex = &sync.Mutex{}
 	r.config = config
-	r.campaign = campaign
+	r.transport = transport
 	r.currentTerm = 0
 	r.quitCh = make(chan bool)
 	r.heartbeatCh = make(chan Beat)
@@ -95,67 +95,7 @@ func (n *raftNode) CurrentRole() Role {
 }
 
 
-
-
-
-
-/* 
-Follower state:
- Election Notice:    
-      1. Stop election monitor
-      2. Become candidate
-      3. Start campaign
- Elected = YES Signal
-      Invalid
- Elected = NO Signal
-      Invalid
- Heartbeat
-      1. Check the current term of the leader
-      2. Acknowledge the other node as leader
-      3. Reset the election monitor
- Quit
-    1. Stop the election monitor
-    2. Quit
-
-
-Candidate state:
- Election Notice:
-    Invalid   
- Elected = YES Signal
-    1. Become the leader
-    2. Start sending heartbeats (doubt: once elected as a leader - should we consider election timeout)
- Elected = NO Signal
-    1. Nobody got elected, restart the campaign
- Heartbeat
-    1. Check the current term of the leader
-    2. Acknowledge the other node as leader
-    3. Set to Follower
- Quit
-    1. Stop the campaign
-    2. Quit
- 
-
-Leader state:
- Election Notice:
-    Invalid? (check doubt above)
- Elected = YES Signal
-    Invalid
- Elected = NO Signal
-    Invalid
- Heartbeat
-    1. Check the current term of the leader
-    2. Acknowledge the other node as leader
-    3. Set to Follower
- Quit
-    1. Stop the heartbeat signalling
-    2. Quit
-*/
-
-
 func loop(node *raftNode) {	
-
-
-	
 	
 	go func() {
 		node.wg.Add(1)
