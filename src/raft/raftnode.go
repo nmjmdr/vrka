@@ -4,6 +4,8 @@ import (
 	"sync"
 )
 
+// note: how to ensure a follower only votes once in a
+// given term???
 
 type Role int
 
@@ -53,9 +55,6 @@ type raftNode struct {
 
 	state state
 }
-
-
-
 
 
 func NewRaftNode(id string,monitor Monitor,config Config,transport Transport) RaftNode {
