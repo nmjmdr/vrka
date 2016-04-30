@@ -1,5 +1,5 @@
 package raft
 
 type Transport interface {
-	RequestForVote(request VoteRequest,responseCh chan VoteResponse)
+	RequestForVote(VoteRequest) (VoteResponse,error)
 }

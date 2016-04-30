@@ -19,16 +19,15 @@ const (
 
 type Beat struct {
 	From string
-	Term uint32
+	Term uint64
 	Address string
 }
 
 
 type state interface {
-	onElectionNotice(r *raftNode) state
-	onElectionResult(r *raftNode,elected bool) state
-	onQuit(r *raftNode) state
-	onHeartbeat(r *raftNode,beat Beat) state	
+	onElectionNotice() state
+	onQuit() state
+	onHeartbeat(beat Beat) state	
 }
 
 
@@ -44,7 +43,7 @@ type raftNode struct {
 	leader Peer
 	votedFor string
 	config Config
-	currentTerm uint32
+	currentTerm uint64
 	transport Transport
 
 	mutex *sync.Mutex
@@ -71,7 +70,7 @@ func NewRaftNode(id string,monitor Monitor,config Config,transport Transport) Ra
 	r.monitor = monitor
 	r.wg = &sync.WaitGroup{}
 
-	r.state = new(follower)
+	r.state = NewFollower(r)
 	
 	// start watching for notices and heartbeats
 	loop(r)
@@ -104,11 +103,11 @@ func loop(node *raftNode) {
 			select {
 			case _,ok := <-node.monitor.ElectionNotice():	
 				if ok {
-					node.state = node.state.onElectionNotice(node)
+					node.state = node.state.onElectionNotice()
 				}
 			case beat,ok := <-node.heartbeatCh:
 				if ok {
-					node.state = node.state.onHeartbeat(node,beat)
+					node.state = node.state.onHeartbeat(beat)
 				
 				}
 			case <-node.quitCh:			
