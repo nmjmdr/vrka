@@ -8,7 +8,7 @@ type follower struct {
 }
 
 
-func NewFollower(r *raftNode) state {
+func NewFollower(r *raftNode) *follower  {
 	f := new(follower)
 	f.r = r
 	return f

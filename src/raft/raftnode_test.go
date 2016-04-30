@@ -25,8 +25,10 @@ func Test_CandidateTransition(t *testing.T) {
 	monitor := new(mockMonitor)
 	// make it a buffered channel
 	monitor.c = make(chan time.Time)
+
+	config := NewConfig()
 	
-	node := NewRaftNode("id",monitor,nil,nil)
+	node := NewRaftNode("id",monitor,config,nil)
 	// signal it
 	monitor.c <- time.Time{}
 	
@@ -42,8 +44,9 @@ func Test_CandiateToFollower(t *testing.T) {
 	// make it a buffered channel
 	monitor.c = make(chan time.Time)
 	
-	node := NewRaftNode("id",monitor,nil,nil)
-	// signal it]
+	config := NewConfig()	
+	node := NewRaftNode("id",monitor,config,nil)
+	// signal it
 	
 	monitor.c <- time.Time{}	
 
@@ -51,6 +54,7 @@ func Test_CandiateToFollower(t *testing.T) {
 	
 	// sleep so that we give a chance for the node to transition to
 	// to a candidate
+	// need a better way to perform this - than sleeping, will figure out later
 	if node.CurrentRole() != Candidate {
 		t.Fatal("should have been a candidate")
 	}
@@ -79,8 +83,9 @@ func Test_RejectBeat(t *testing.T) {
 	// make it a buffered channel
 	monitor.c = make(chan time.Time)
 	
-	node := NewRaftNode("id",monitor,nil,nil)
-	// signal it]
+	config := NewConfig()	
+	node := NewRaftNode("id",monitor,config,nil)
+	// signal it
 	
 	monitor.c <- time.Time{}	
 
@@ -88,6 +93,7 @@ func Test_RejectBeat(t *testing.T) {
 	
 	// sleep so that we give a chance for the node to transition to
 	// to a candidate
+	// need a better way to perfom this - than sleeping, will figure out later
 	if node.CurrentRole() != Candidate {
 		t.Fatal("should have been a candidate")
 	}
