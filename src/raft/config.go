@@ -4,17 +4,17 @@ type Config interface {
 	Peers() []Peer
 }
 
-type config struct {
+type mockConfig struct {
 	peers []Peer
 }
 
-func NewConfig() *config {
-	c := new(config)
-	c.peers = make([]Peer,1)
+func NewMockConfig(peers []Peer) *mockConfig {
+	c := new(mockConfig)
+	c.peers = peers
 
 	return c
 }
 
-func (c *config) Peers() []Peer {
+func (c *mockConfig) Peers() []Peer {
 	return c.peers
 }
