@@ -98,7 +98,9 @@ func (n *raftNode) CurrentRole() role {
 func (n *raftNode) anounceRoleChange(role role) {
 	select {
 	case n.roleChangeCh <- role:
-	default:
+		//default:
+		// un comment this for real run
+		// udpate this section later
 	}
 }
 
@@ -117,8 +119,9 @@ func loop(node *raftNode) {
 			case _,ok := <-node.monitor.ElectionNotice():	
 				if ok {
 					fmt.Println("got election notice")
-					fmt.Printf("role: %s\n",node.id)					
+					fmt.Printf("node id: %s\n",node.id)					
 					node.stateFn(node,&(electionTimoutEvt{}))
+					fmt.Printf("will anounce role change: %d\n",node.role)
 					node.anounceRoleChange(node.role)
 				}
 
@@ -127,6 +130,7 @@ func loop(node *raftNode) {
 					hb := new(heartbeatEvt)
 					hb.beat = beat
 					node.stateFn(node,hb)
+					fmt.Printf("will anounce role change: %d\n",node.role)
 					node.anounceRoleChange(node.role)				
 				}
 
@@ -136,6 +140,7 @@ func loop(node *raftNode) {
 					resultEvt := new(electionResultEvt)
 					resultEvt.elected = result
 					node.stateFn(node,resultEvt)
+					fmt.Printf("will anounce role change: %d\n",node.role)
 					node.anounceRoleChange(node.role)
 				}
 

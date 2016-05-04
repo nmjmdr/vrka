@@ -27,6 +27,8 @@ func (c *candidateScope) switchHandler(t EvtType) stateFunction  {
 		return c.onElectionResult
 	case t == HeartbeatEvtType:
 		return c.onHeartbeat
+	case t == ElectionTimeoutEvtType:
+		return c.onElectionNotice
 	default:
 		return nil
 	}
@@ -34,6 +36,16 @@ func (c *candidateScope) switchHandler(t EvtType) stateFunction  {
 
 
 func (c *candidateScope) onHeartbeat(r *raftNode,evt Evt) {
+	// reset the election monitor and move to a follower role
+	r.mutex.Lock()
+	r.role = follower
+	r.mutex.Unlock()
+	r.monitor.Reset()
+}
+
+
+func (c *candidateScope) onElectionNotice(r *raftNode,evt Evt) {
+	// election notice obtained, did not get elected within the time
 	// reset the election monitor and move to a follower role
 	r.mutex.Lock()
 	r.role = follower
