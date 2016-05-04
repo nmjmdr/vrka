@@ -3,7 +3,8 @@ package raft
 import (
 	"testing"
 	"time"
-	//"fmt"
+	"fmt"
+	"sync"
 )
 
 type mockMonitor struct {
@@ -37,17 +38,23 @@ func Test_SinglePeerTransition(t *testing.T) {
 	transport := NewMockTransport(vres)
 	
 	node := NewRaftNode("id1",monitor,config,transport)
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		for i:=0;i<2;i++ {
+		select {
+		case role,_ := <- node.RoleChange():
+			fmt.Printf("got role change: %d\n",role)
+		}
+		}
+		wg.Done()
+	}()
+
 	// signal it
 	monitor.c <- time.Time{}
 
-	
-	// there should 2 transitions
-	for i:=0;i<2;i++ {
-		select {
-		case <- node.RoleChange():
-		}
-	}
-
+	wg.Wait()	
 
 	node.Stop()
 
@@ -58,7 +65,7 @@ func Test_SinglePeerTransition(t *testing.T) {
 	
 }
 
-/*
+
 func Test_ThreePeersTransition(t *testing.T) {
 
 	n := 3
@@ -79,7 +86,7 @@ func Test_ThreePeersTransition(t *testing.T) {
 		monitors[i].c = make(chan time.Time)
 
 		// give the vote
-		vres := VoteResponse{}
+		vres := voteResponse{}
 		vres.voteGranted = true
 		
 		transports[i] = NewMockTransport(vres)
@@ -88,14 +95,23 @@ func Test_ThreePeersTransition(t *testing.T) {
 	
 	}
 
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		for i:=0;i<2;i++ {
+		select {
+		case role,_ := <- nodes[0].RoleChange():
+			fmt.Printf("got role change: %d\n",role)
+		}
+		}
+		wg.Done()
+	}()
+
 	// signal election notice for node id0
 	monitors[0].c <- time.Time{}
 
-	//wait for role change
-
-	select {
-	case <- nodes[0].RoleChange():
-	}
+	wg.Wait()
 	
 
 	for i:=0;i<n;i++ {
@@ -103,7 +119,7 @@ func Test_ThreePeersTransition(t *testing.T) {
 	}
 	
 
-	if nodes[0].CurrentRole() != Leader {
+	if nodes[0].CurrentRole() != leader {
 		t.Fatal("should have been a leader")
 	}
 }
@@ -130,7 +146,7 @@ func Test_ThreePeersTransitionNoVotes(t *testing.T) {
 		monitors[i].c = make(chan time.Time)
 
 		// give the vote
-		vres := VoteResponse{}
+		vres := voteResponse{}
 		vres.voteGranted = false
 		
 		transports[i] = NewMockTransport(vres)
@@ -139,15 +155,26 @@ func Test_ThreePeersTransitionNoVotes(t *testing.T) {
 	
 	}
 
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		for i:=0;i<2;i++ {
+		select {
+		case role,_ := <- nodes[0].RoleChange():
+			fmt.Printf("got role change: %d\n",role)
+		}
+		}
+		wg.Done()
+	}()
+	
+
 	// signal election notice for node id0
 	monitors[0].c <- time.Time{}
 
-	select {
-	case <- nodes[0].RoleChange():
-	}	
+	wg.Wait()
 
-	if nodes[0].CurrentRole() != Candidate {
-		t.Fatal("should have been a candidate")
+	if nodes[0].CurrentRole() != follower {
+		t.Fatal("should have been a follower")
 	}
 
 	for i:=0;i<n;i++ {
@@ -156,7 +183,7 @@ func Test_ThreePeersTransitionNoVotes(t *testing.T) {
 }
 
 
-
+/*
 func Test_ThreePeersTransitionRelection(t *testing.T) {
 
 	n := 3

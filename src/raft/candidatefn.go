@@ -56,6 +56,8 @@ func (c *candidateScope) onElectionResult(r *raftNode,evt Evt) {
 		fmt.Printf("Did not get elected, becoming a follower: %s\n",r.id)
 		r.role = follower
 		r.stateFn = followerFn
+		// reset the election timeout
+		r.monitor.Reset()
 	}	
 	r.mutex.Unlock()
 	
