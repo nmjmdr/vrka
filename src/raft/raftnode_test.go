@@ -222,46 +222,121 @@ func Test_ThreePeersTransitionRelection(t *testing.T) {
 	
 	}
 
+	
+
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
+		for i:=0;i<2;i++ {
 		select {
-		case <- nodes[0].RoleChange():
+		case role,_ := <- nodes[0].RoleChange():
+			if i ==0 && role != candidate {
+				t.Fatal("should have been a candidate")
+			} else if i == 1 && role != follower {
+				t.Fatal("should have been follower")
+			}
+		}
 		}
 		wg.Done()
 	}()
 
+	// signal election notice for node id0
+	monitors[0].c <- time.Time{}
+	
+	wg.Wait()
+
+	
+	wg.Add(1)
+	go func() {	
+		select {
+		case role,_ := <- nodes[0].RoleChange():
+			if role != candidate {
+				t.Fatal("should have been a candidate")
+			}		
+		}
+		wg.Done()
+	}()
+
+	// signal election notice for node id0
+	monitors[0].c <- time.Time{}
+	
+
+	wg.Wait()
+
+	for i:=0;i<n;i++ {
+		nodes[i].Stop()
+	}
+}
+
+
+func Test_TransitionWithDelayForVoting(t *testing.T) {
+
+	n := 3
+
+	//setup peers
+	peers := make([]Peer,n)
+	for i:=0;i<n;i++ {
+		peers[i].Id = fmt.Sprintf("id%d",i)
+	}
+	config := NewMockConfig(peers)
+
+		
+	monitors := make([](*mockMonitor),n)
+	transports := make([](*mockTransport),n)
+	nodes := make([]RaftNode,n)
+		
+	for i:=0;i<n;i++ {
+		monitors[i] = new(mockMonitor)
+		monitors[i].c = make(chan time.Time)
+
+		// give the vote
+		vres := voteResponse{}
+		vres.voteGranted = false
+		
+		transports[i] = NewMockTransportWithDelay(vres,(500 * time.Millisecond))
+
+		nodes[i] = NewRaftNode(fmt.Sprintf("id%d",i),monitors[i],config,transports[i])
+	
+	}
+
+	
+	doneWg := sync.WaitGroup{}
+	doneWg.Add(1)
+	
+	go func() {		
+		select {
+		case role,_ := <- nodes[0].RoleChange():
+			if role != candidate {
+				t.Fatal("should have been a candidate")
+			}
+		
+		}
+		doneWg.Done()
+	}()
+	
+	
 	
 	// signal election notice for node id0
 	monitors[0].c <- time.Time{}
 
-	wg.Wait()
-	
-	
-	//fmt.Printf("The role is: %d\n",nodes[0].CurrentRole())
+	doneWg.Wait()
 
-	if nodes[0].CurrentRole() != candidate {
-		t.Fatal("should have been a candidate")
-	}
 
-	wg.Add(1)
-	go func() {
+	doneWg.Add(1)
+	
+	go func() {		
 		select {
-		case <- nodes[0].RoleChange():
+		case role,_ := <- nodes[0].RoleChange():
+			if role != follower {
+				t.Fatal("should have been a follower")
+			}
+		
 		}
-		wg.Done()
+		doneWg.Done()
 	}()
-	
 
-	// signal election notice for node id0, so that it now transitions
-	// to a follower
+	// signal election notice for node id0
 	monitors[0].c <- time.Time{}
-
-	wg.Wait()
-
-	if nodes[0].CurrentRole() != follower {
-		t.Fatal("should have been a follower")
-	}
 
 	for i:=0;i<n;i++ {
 		nodes[i].Stop()
