@@ -14,17 +14,22 @@ const (
 )
 
 
-type beat struct {
+type entry struct {
 	term uint64
-	from string
+	leaderId string
+	prevLogIndex uint64
+	prevLogTerm uint64
+	entries []byte
+	leaderCommit uint64
 }
 
 
 type RaftNode interface {
-	Heartbeat(beat beat)
+	Append(entry entry)
 	Stop()
 	CurrentRole() role
 	RoleChange() <- chan role
+	RequestForVote(vreq voteRequest) voteResponse
 }
 
 type raftNode struct {
@@ -40,7 +45,7 @@ type raftNode struct {
 	monitor Monitor
 
 	quitCh chan bool
-	heartbeatCh chan beat
+	appendCh chan entry
 	roleChangeCh chan role
 	electionResultCh chan bool
 
@@ -61,7 +66,7 @@ func NewRaftNode(id string,monitor Monitor,config Config,transport Transport) Ra
 	r.term = 0
 
 	r.quitCh = make(chan bool)
-	r.heartbeatCh = make(chan beat)
+	r.appendCh = make(chan entry)
 	r.roleChangeCh = make(chan role)
 	r.electionResultCh = make(chan bool)
 
@@ -70,6 +75,8 @@ func NewRaftNode(id string,monitor Monitor,config Config,transport Transport) Ra
 
 	r.stateFn = followerFn
 
+	r.votedFor = ""
+	
 	loop(r)
 
 	return r
@@ -85,8 +92,8 @@ func (n *raftNode) Stop() {
 	n.wg.Wait()
 }
 
-func (n *raftNode) Heartbeat(beat beat) {
-	n.heartbeatCh <- beat
+func (n *raftNode) Append(e entry) {
+	n.appendCh <- e
 }
 
 func (n *raftNode) CurrentRole() role {
@@ -104,7 +111,35 @@ func (n *raftNode) anounceRoleChange(role role) {
 	}
 }
 
+func (r *raftNode) RequestForVote(vreq voteRequest) voteResponse {
 
+	vres := voteResponse{}
+
+	defer r.mutex.Unlock()
+	r.mutex.Lock()
+		
+	if vreq.term < r.term {
+		vres.voteGranted = false
+		vres.termToUpdate = r.term
+		return vres
+	}
+
+	
+	if len(r.votedFor) == 0 {
+		// need to extend this condition: If votedFor is null or candidateId, and candidate's log is at least as up-to-date as receiver's log, grant vote
+		vres.voteGranted = true
+		// set the term and voted for
+		r.votedFor = vreq.candidateId
+		r.term = vreq.term
+
+		return vres		
+	}
+
+	vres.termToUpdate = r.term
+	vres.voteGranted = false
+
+	return vres	
+}
 
 func loop(node *raftNode) {	
 	
@@ -125,13 +160,15 @@ func loop(node *raftNode) {
 					node.anounceRoleChange(node.role)
 				}
 
-			case beat,ok := <-node.heartbeatCh:
+			case e,ok := <-node.appendCh:
 				if ok {
-					hb := new(heartbeatEvt)
-					hb.beat = beat
-					node.stateFn(node,hb)
-					fmt.Printf("will anounce role change: %d\n",node.role)
-					node.anounceRoleChange(node.role)				
+					if e.entries == nil || len(e.entries) == 0 {
+						hb := new(heartbeatEvt)
+						hb.e = e
+						node.stateFn(node,hb)
+						fmt.Printf("will anounce role change: %d\n",node.role)
+						node.anounceRoleChange(node.role)
+					}
 				}
 
 			case result,ok := <-node.electionResultCh:
@@ -143,6 +180,8 @@ func loop(node *raftNode) {
 					fmt.Printf("will anounce role change: %d\n",node.role)
 					node.anounceRoleChange(node.role)
 				}
+
+			
 
 			case <-node.quitCh:
 				fmt.Println("got quit")

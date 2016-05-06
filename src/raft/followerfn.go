@@ -37,7 +37,7 @@ func (f *followerScope) switchHandler(t EvtType) stateFunction  {
 
 func (f *followerScope) onHeartbeat(r *raftNode,evt Evt) {
 	// got heartbeat
-	// reset the election monitor
+	// assumption: we do not have to set the term here?
 	r.monitor.Reset()
 }
 

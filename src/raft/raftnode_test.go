@@ -413,11 +413,11 @@ func Test_ThreePeersTransitionOtherNodeHeartbeat(t *testing.T) {
 	}()
 
 	// now signal a heartbeat from another node
-	beat := beat{}
+	e := entry{}
 	raft0,_ := nodes[0].(*raftNode)
-	beat.term = (raft0.term + 1)
-	beat.from = "id1"
-	nodes[0].Heartbeat(beat)
+	e.term = (raft0.term + 1)
+	e.leaderId = "id1"
+	nodes[0].Append(e)
 
 	doneWg.Wait()
 

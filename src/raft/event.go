@@ -15,7 +15,7 @@ type Evt interface {
 }
 
 type heartbeatEvt struct {
-	beat beat
+	e entry
 }
 
 func (h *heartbeatEvt) Type() EvtType {
