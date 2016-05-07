@@ -37,7 +37,7 @@ func Test_SinglePeerTransition(t *testing.T) {
 	
 	transport := NewMockTransport(vres)
 	
-	node := NewRaftNode("id1",monitor,config,transport)
+	node := NewRaftNode("id1",monitor,config,transport,nil)
 
 	
 	wg := sync.WaitGroup{}
@@ -96,7 +96,7 @@ func Test_ThreePeersTransition(t *testing.T) {
 		
 		transports[i] = NewMockTransport(vres)
 
-		nodes[i] = NewRaftNode(fmt.Sprintf("id%d",i),monitors[i],config,transports[i])
+		nodes[i] = NewRaftNode(fmt.Sprintf("id%d",i),monitors[i],config,transports[i],nil)
 	
 	}
 
@@ -156,7 +156,7 @@ func Test_ThreePeersTransitionNoVotes(t *testing.T) {
 		
 		transports[i] = NewMockTransport(vres)
 
-		nodes[i] = NewRaftNode(fmt.Sprintf("id%d",i),monitors[i],config,transports[i])
+		nodes[i] = NewRaftNode(fmt.Sprintf("id%d",i),monitors[i],config,transports[i],nil)
 	
 	}
 
@@ -218,7 +218,7 @@ func Test_ThreePeersTransitionRelection(t *testing.T) {
 		
 		transports[i] = NewMockTransport(vres)
 
-		nodes[i] = NewRaftNode(fmt.Sprintf("id%d",i),monitors[i],config,transports[i])
+		nodes[i] = NewRaftNode(fmt.Sprintf("id%d",i),monitors[i],config,transports[i],nil)
 	
 	}
 
@@ -295,7 +295,7 @@ func Test_TransitionWithDelayForVoting(t *testing.T) {
 		
 		transports[i] = NewMockTransportWithDelay(vres,(500 * time.Millisecond))
 
-		nodes[i] = NewRaftNode(fmt.Sprintf("id%d",i),monitors[i],config,transports[i])
+		nodes[i] = NewRaftNode(fmt.Sprintf("id%d",i),monitors[i],config,transports[i],nil)
 	
 	}
 
@@ -372,7 +372,7 @@ func Test_ThreePeersTransitionOtherNodeHeartbeat(t *testing.T) {
 		
 		transports[i] = NewMockTransportWithDelay(vres,(500 * time.Millisecond))
 
-		nodes[i] = NewRaftNode(fmt.Sprintf("id%d",i),monitors[i],config,transports[i])
+		nodes[i] = NewRaftNode(fmt.Sprintf("id%d",i),monitors[i],config,transports[i],nil)
 	
 	}
 
