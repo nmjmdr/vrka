@@ -1,7 +1,7 @@
 package raft
 
 type Transport interface {
-	RequestForVote(voteRequest) (voteResponse,error)
+	RequestForVote(vreq voteRequest,peer Peer) (voteResponse,error)
 }
 
 

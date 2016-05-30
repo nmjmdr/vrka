@@ -2,226 +2,157 @@ package raft
 
 import (
 	"fmt"
+	"timerwrap"
+	"time"
+	"math/rand"
 	"sync"
 )
 
 type role int
 
 const (
-	leader = 1
-	candidate = 2
-	follower = 3
+	Leader = 1
+	Candidate = 2
+	Follower = 3
 )
 
-const termKey = "term-key"
+const MinElectionTimeout = 150
+const MaxElectionTimeout = 300
 
-type entry struct {
+type voteRequest struct {
 	term uint64
-	leaderId string
-	prevLogIndex uint64
-	prevLogTerm uint64
-	entries []byte
-	leaderCommit uint64
+	candidateId string
+	lastLogIndex uint64
+	lastLogTerm uint64
+}
+
+type voteResponse struct {
+	termToUpdate uint64
+	voteGranted bool
+	from string
 }
 
 
-type RaftNode interface {
-	Append(entry entry) (uint64,bool)
-	Stop()
-	CurrentRole() role
-	RoleChange() <- chan role
-	RequestForVote(vreq voteRequest) voteResponse
-}
-
-type raftNode struct {
+type node struct {
 	id string
+	votesGot uint32
+	outstandingVotes uint32
+
+	currentTerm uint64
 	role role
 	leader Peer
 
-	// both votedFor and term should be on stable store
-	term uint64
-	// stable store end
-	// move these to stable store
+	eventCh chan interface{}
 
-	transport Transport
+	electionTimer timerwrap.TimerWrap
+
 	config Config
-	stable Stable
-	
-	mutex *sync.Mutex
-	monitor Monitor
+	transport Transport
 
-	quitCh chan bool
-	appendCh chan entry
-	roleChangeCh chan role
-	electionResultCh chan bool
+	getTimer getTimerFn
+
+	electionTimeout time.Duration
 
 	wg *sync.WaitGroup
-
-	stateFn stateFunction
 }
 
-type stateFunction func(r *raftNode,evt Evt)
 
-func NewRaftNode(id string,monitor Monitor,config Config,transport Transport,stable Stable) RaftNode {
-	r := new(raftNode)
-	r.id = id
-	r.role = follower
-	r.mutex = &sync.Mutex{}
-	r.config = config
-	r.transport = transport
-	//r.stable = stable
+type getTimerFn func(d time.Duration) timerwrap.TimerWrap
 
-	// load last term from store, when we start and when the term changes write it to storage
-	var err error
-	// change this later to:
-	//r.term,err = r.stable.GetUint64(termKey)
-	r.term = 0
 
-	if err != nil {
-		panic("unable to read last term from stable store")
-	}
+func newNode(id string,config Config,transport Transport,g getTimerFn) *node {
+	n := new(node)
+	n.id = id
+	n.eventCh = make(chan interface{})
+	n.currentTerm = 0
+
+	n.config = config
+	n.transport = transport
+
+	n.getTimer = g
+
+	n.electionTimeout = getRandomTimeout(MinElectionTimeout,MaxElectionTimeout)
+
+	n.wg = &sync.WaitGroup{}
+
+	n.loop()
 	
-	r.quitCh = make(chan bool)
-	r.appendCh = make(chan entry)
-	r.roleChangeCh = make(chan role)
-	r.electionResultCh = make(chan bool)
+	return n
+}
 
-	r.monitor = monitor
-	r.wg = &sync.WaitGroup{}
+func getRandomTimeout(startRange int,endRange int) time.Duration {
+	timeout := startRange + rand.Intn(endRange - startRange)
 
-	r.stateFn = followerFn
-
-	
-	
-	loop(r)
-
-	return r
+	return time.Duration(timeout) * time.Millisecond
 }
 
 
-func (n *raftNode) RoleChange() <- chan role {
-	return n.roleChangeCh
-}
+func (n *node) loop() {
 
-func (n *raftNode) Stop() {
-	n.quitCh <- true
-	n.wg.Wait()
-}
-
-func (n *raftNode) Append(e entry) (uint64,bool) {
-
-	if e.term < n.term {
-		return n.term,false
-	}
-	n.appendCh <- e
-	// return n.term???
-	// there are other rules, check the paper
-	return n.term,true
-}
-
-func (n *raftNode) CurrentRole() role {
-	n.mutex.Lock()
-	defer n.mutex.Unlock()
-	return n.role
-}
-
-func (n *raftNode) anounceRoleChange(role role) {
-	select {
-	case n.roleChangeCh <- role:
-		//default:
-		// un comment this for real run
-		// udpate this section later
-	}
-}
-
-
-func (r *raftNode) alreadyVoted(term uint64,candidateId string) bool {
-
-	
-	
-	return false
-}
-
-func (r *raftNode) RequestForVote(vreq voteRequest) voteResponse {
-
-	vres := voteResponse{}
-
-	defer r.mutex.Unlock()
-	r.mutex.Lock()
-		
-	if vreq.term < r.term {
-		vres.voteGranted = false
-		vres.termToUpdate = r.term
-		return vres
-	}
-
-	
-	if !r.alreadyVoted(vreq.term,vreq.candidateId) {
-		// need to extend this condition: If votedFor is null or candidateId, and candidate's log is at least as up-to-date as receiver's log, grant vote
-		vres.voteGranted = true
-		// set the term and voted for
-		//r.votedFor = vreq.candidateId
-		r.term = vreq.term
-
-		return vres		
-	}
-
-	vres.termToUpdate = r.term
-	vres.voteGranted = false
-
-	return vres	
-}
-
-func loop(node *raftNode) {	
-	
 	go func() {
-		node.wg.Add(1)
-		defer node.wg.Done()
- 		quit := false
-			
-		for !quit {
-			fmt.Println("will wait on select")
+		defer n.wg.Done()
+		n.wg.Add(1)
+		for  {
+			fmt.Println("invoking select")
 			select {
-			case _,ok := <-node.monitor.ElectionNotice():	
+			case e,ok := <-n.eventCh:
+				fmt.Printf("got event, and ok is: %d\n",ok)
 				if ok {
-					fmt.Println("got election notice")
-					fmt.Printf("node id: %s\n",node.id)					
-					node.stateFn(node,&(electionTimoutEvt{}))
-					fmt.Printf("will anounce role change: %d\n",node.role)
-					node.anounceRoleChange(node.role)
+
+					_,quit := e.(*Quit)
+					if !quit {
+						n.dispatch(e)
+					} 
 				}
-
-			case e,ok := <-node.appendCh:
-				if ok {
-					if e.entries == nil || len(e.entries) == 0 {
-						hb := new(heartbeatEvt)
-						hb.e = e
-						node.stateFn(node,hb)
-						fmt.Printf("will anounce role change: %d\n",node.role)
-						node.anounceRoleChange(node.role)
-					} else {
-						// log the entries
-					}
-				}
-
-			case result,ok := <-node.electionResultCh:
-				if ok {
-					fmt.Println("got election result")
-					resultEvt := new(electionResultEvt)
-					resultEvt.elected = result
-					node.stateFn(node,resultEvt)
-					fmt.Printf("will anounce role change: %d\n",node.role)
-					node.anounceRoleChange(node.role)
-				}
-
-			
-
-			case <-node.quitCh:
-				fmt.Println("got quit")
-				quit = true
-				break
+				return
 			}
-		}
+		}		
 	}()
 }
 
+
+
+func (n *node) dispatch(evt interface{}) {
+
+	switch t := evt.(type) {
+	default:
+		panic(fmt.Sprintf("Unexpected event: %T",t))
+	case *Initialized:
+		// initialize
+		// set the role as Follower
+		fmt.Println("Init event received")
+		n.role = Follower
+		startElectionTimer(n)
+		
+		
+	case *ElectionAnounced:
+		// election anounced
+
+		fmt.Println("Got election anounced event")
+		
+		if n.role == Follower {
+			n.role = Candidate
+			// start the election
+		} else if n.role == Candidate {
+			// did not get elected within the time, restart the election
+		} else {
+			panic("Got election anouncement while being a leader")
+		}
+		
+	/*
+	case *VoteFrom:
+		// check if we got the vote
+		majority := (n.config.Peers / 2) + 1
+		if t.voteGranted {
+			n.votesGot++
+			if n.votesGot >= majority {
+				// got elected
+				r.role = Leader
+			}
+		}
+*/
+		
+	}
+
+
+}
