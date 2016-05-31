@@ -32,9 +32,6 @@ func startElectionTimer(n *node) {
 }
 
 
-func wait(n *node) {
-	n.wg.Wait()
-}
 
 /*
 func startElection(n *node) {

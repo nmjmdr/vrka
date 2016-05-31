@@ -4,7 +4,19 @@ import (
 	"testing"
 	"timerwrap"
 	"time"
+	"sync"
+	"fmt"
 )
+
+func waitForStateChange(t *testing.T,n *node,wg *sync.WaitGroup) {
+	select {
+	case role,ok := <- n.stateChange:
+		if ok {			
+			t.Log(fmt.Sprintf("State change, current role %d",role))
+		}
+	}
+	wg.Done()
+}
 
 func Test_FollowerToCandidate(t *testing.T) {
 
@@ -21,23 +33,30 @@ func Test_FollowerToCandidate(t *testing.T) {
 	transport := newInMemoryTransport()
 	n := newNode("1",config,transport,g)
 
-	start(n)
+	wg := sync.WaitGroup{}
+	go waitForStateChange(t,n,&wg)
 
+	wg.Add(1)
+	start(n)
+	wg.Wait()
+	
 	mockTimer,_ := timer.(*timerwrap.MockTimer)
 
-	time.Sleep(200 * time.Millisecond)
-	
+	go waitForStateChange(t,n,&wg)
+	wg.Add(1)
 	mockTimer.Tick()
-
-	time.Sleep(200 * time.Millisecond)
-
-	stop(n)
-	
-	wait(n)
+	wg.Wait()
 
 	if n.role != Candidate {
 		t.Fatal("Should have been a candidate")
 	}
+
+	go waitForStateChange(t,n,&wg)
+	wg.Add(1)
+	stop(n)
+	wg.Wait()
+
+	
 	
 	
 }

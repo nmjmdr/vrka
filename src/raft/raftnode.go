@@ -54,6 +54,8 @@ type node struct {
 	electionTimeout time.Duration
 
 	wg *sync.WaitGroup
+
+	stateChange chan role
 }
 
 
@@ -75,6 +77,8 @@ func newNode(id string,config Config,transport Transport,g getTimerFn) *node {
 
 	n.wg = &sync.WaitGroup{}
 
+	n.stateChange = make(chan role)
+
 	n.loop()
 	
 	return n
@@ -95,16 +99,17 @@ func (n *node) loop() {
 		for  {
 			fmt.Println("invoking select")
 			select {
-			case e,ok := <-n.eventCh:
-				fmt.Printf("got event, and ok is: %d\n",ok)
+			case e,ok := <-n.eventCh:				
 				if ok {
-
+					fmt.Println("got event")
 					_,quit := e.(*Quit)
 					if !quit {
 						n.dispatch(e)
-					} 
+					} else {
+						n.stateChange <- n.role
+						return
+					}
 				}
-				return
 			}
 		}		
 	}()
@@ -123,7 +128,8 @@ func (n *node) dispatch(evt interface{}) {
 		fmt.Println("Init event received")
 		n.role = Follower
 		startElectionTimer(n)
-		
+
+		n.stateChange <- n.role
 		
 	case *ElectionAnounced:
 		// election anounced
@@ -138,7 +144,8 @@ func (n *node) dispatch(evt interface{}) {
 		} else {
 			panic("Got election anouncement while being a leader")
 		}
-		
+
+		n.stateChange <- n.role
 	/*
 	case *VoteFrom:
 		// check if we got the vote
