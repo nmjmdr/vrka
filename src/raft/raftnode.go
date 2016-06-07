@@ -19,6 +19,10 @@ const (
 const MinElectionTimeout = 150
 const MaxElectionTimeout = 300
 
+const currentTermKey = "Current_Term"
+const votedForKey = "Voted_For_Key"
+
+
 type voteRequest struct {
 	term uint64
 	candidateId string
@@ -48,6 +52,7 @@ type node struct {
 
 	config Config
 	transport Transport
+	stable Stable
 
 	getTimer getTimerFn
 
@@ -62,7 +67,7 @@ type node struct {
 type getTimerFn func(d time.Duration) timerwrap.TimerWrap
 
 
-func newNode(id string,config Config,transport Transport,g getTimerFn) *node {
+func newNode(id string,config Config,transport Transport,g getTimerFn,stable Stable) *node {
 	n := new(node)
 	n.id = id
 	n.eventCh = make(chan interface{})
@@ -70,6 +75,7 @@ func newNode(id string,config Config,transport Transport,g getTimerFn) *node {
 
 	n.config = config
 	n.transport = transport
+	n.stable = stable
 
 	n.getTimer = g
 
@@ -79,9 +85,25 @@ func newNode(id string,config Config,transport Transport,g getTimerFn) *node {
 
 	n.stateChange = make(chan role)
 
+	n.role = Follower
+
+	//set term from stable
+	n.setCurrentTermFromStable()
+
 	n.loop()
 	
 	return n
+}
+
+func (n *node) setCurrentTermFromStable() {
+	term,ok := n.stable.GetUint64(currentTermKey)
+	if !ok {
+		// probably this is the first time we are running this node
+		n.currentTerm = 0
+		n.stable.Store(currentTermKey,n.currentTerm)
+		return
+	}
+	n.currentTerm = term
 }
 
 func getRandomTimeout(startRange int,endRange int) time.Duration {
@@ -119,17 +141,18 @@ func (n *node) loop() {
 
 func (n *node) dispatch(evt interface{}) {
 
+
+	
 	switch t := evt.(type) {
 	default:
 		panic(fmt.Sprintf("Unexpected event: %T",t))
-	case *Initialized:
+	case *StartFollower:
 		// initialize
 		// set the role as Follower
-		fmt.Println("Init event received")
 		n.role = Follower
+		fmt.Println("Start Follower event received")
 		startElectionTimer(n)
-
-		n.stateChange <- n.role
+	
 		
 	case *ElectionAnounced:
 		// election anounced
@@ -137,29 +160,46 @@ func (n *node) dispatch(evt interface{}) {
 		fmt.Println("Got election anounced event")
 		
 		if n.role == Follower {
+			fmt.Println("Changing to candidate and starting election")
 			n.role = Candidate
 			// start the election
+			startElection(n)
 		} else if n.role == Candidate {
 			// did not get elected within the time, restart the election
+			fmt.Println("did not get elected, starting election again")
+			n.role = Follower
+			startElection(n)
 		} else {
 			panic("Got election anouncement while being a leader")
 		}
 
-		n.stateChange <- n.role
-	/*
+	
+	
 	case *VoteFrom:
 		// check if we got the vote
-		majority := (n.config.Peers / 2) + 1
-		if t.voteGranted {
-			n.votesGot++
-			if n.votesGot >= majority {
-				// got elected
-				r.role = Leader
-			}
+		if n.role == Follower {
+			// reject this, this should not happen		
+		} else if n.role == Candidate {
+			n.handleVoteFrom(t)
 		}
-*/
-		
-	}
+	}	
+	n.stateChange <- n.role
 
+}
 
+func (n *node) handleVoteFrom(v *VoteFrom) {
+
+	fmt.Printf("got vote from: %s\n",v.from)
+	if v.voteGranted {
+		majority := uint32((len(n.config.Peers()) / 2) + 1)
+		n.votesGot++
+		if n.votesGot >= majority {
+			// got elected
+			fmt.Println("setting as leader")
+			n.role = Leader
+		}
+		} else {
+			// vote denied update self
+		}
+	
 }

@@ -20,7 +20,8 @@ func (i *inMemoryTransport) setNode(n *node) {
 
 
 func (i *inMemoryTransport) RequestForVote(vreq voteRequest,peer Peer) (voteResponse,error) {
-	//vres := i.n.RequestForVote(vreq)
-	return voteResponse{},nil
+	vres,err := RequestForVote(i.n,vreq,peer)
+	
+	return vres,err
 	
 }

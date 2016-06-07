@@ -1,6 +1,6 @@
 package raft
 
-type Initialized struct {	
+type StartFollower struct {	
 }
 
 type ElectionAnounced struct {
