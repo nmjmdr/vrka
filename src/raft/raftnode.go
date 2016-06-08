@@ -36,6 +36,11 @@ type voteResponse struct {
 	from string
 }
 
+type entry struct {
+	term uint64
+	from string
+}
+
 
 type node struct {
 	id string
@@ -64,7 +69,7 @@ type node struct {
 }
 
 
-type getTimerFn func(d time.Duration) timerwrap.TimerWrap
+type getTimerFn func(d time.Duration,nodeId string) timerwrap.TimerWrap
 
 
 func newNode(id string,config Config,transport Transport,g getTimerFn,stable Stable) *node {
@@ -123,11 +128,12 @@ func (n *node) loop() {
 			select {
 			case e,ok := <-n.eventCh:				
 				if ok {
-					fmt.Println("got event")
+					fmt.Printf("%s: got event\n",n.id)
 					_,quit := e.(*Quit)
 					if !quit {
 						n.dispatch(e)
 					} else {
+						fmt.Printf("%s node quiting...\n",n.id)
 						n.stateChange <- n.role
 						return
 					}
@@ -138,68 +144,93 @@ func (n *node) loop() {
 }
 
 
+func (n *node) startAsFollower() {
+	// initialize
+	// set the role as Follower
+	n.role = Follower
+	n.anounceRoleChange()
+	fmt.Println("Start Follower event received")
+	startElectionTimer(n)
+}
+
 
 func (n *node) dispatch(evt interface{}) {
-
-
 	
 	switch t := evt.(type) {
 	default:
 		panic(fmt.Sprintf("Unexpected event: %T",t))
 	case *StartFollower:
-		// initialize
-		// set the role as Follower
-		n.role = Follower
-		fmt.Println("Start Follower event received")
-		startElectionTimer(n)
-	
+		{
+			n.startAsFollower()
+		}
 		
 	case *ElectionAnounced:
-		// election anounced
-
-		fmt.Println("Got election anounced event")
-		
-		if n.role == Follower {
-			fmt.Println("Changing to candidate and starting election")
-			n.role = Candidate
-			// start the election
-			startElection(n)
-		} else if n.role == Candidate {
-			// did not get elected within the time, restart the election
-			fmt.Println("did not get elected, starting election again")
-			n.role = Follower
-			startElection(n)
-		} else {
-			panic("Got election anouncement while being a leader")
-		}
-
+		{
 	
+			fmt.Println("Got election anounced event")		
+			if n.role == Follower {
+				fmt.Println("Changing to candidate and starting election")
+				n.role = Candidate
+				n.anounceRoleChange()
+				// start the election
+				startElection(n)
+			} else if n.role == Candidate {
+				// did not get elected within the time, restart the election
+				fmt.Println("did not get elected, starting election again")
+				n.role = Follower
+				n.anounceRoleChange()
+				startElection(n)
+			} else {
+				panic("Got election anouncement while being a leader")
+			}
+
+		}
 	
 	case *VoteFrom:
-		// check if we got the vote
-		if n.role == Follower {
-			// reject this, this should not happen		
-		} else if n.role == Candidate {
-			n.handleVoteFrom(t)
+		{
+			// check if we got the vote
+			if n.role == Follower {
+				// reject this, might have been a delayed response
+				// from a node
+			} else if n.role == Candidate {
+				n.handleVoteFrom(t)
+			} else if n.role == Leader {
+				// check this
+			}
 		}
-	}	
-	n.stateChange <- n.role
 
+	case *HigherTermDiscovered:
+		{
+			if t.term > n.currentTerm {
+				fmt.Printf("%s: Higher term discovered",n.id)
+				// revert to follower
+				n.currentTerm = t.term
+				n.startAsFollower()			
+			}
+		}
+	}
+}
+
+func (n *node) anounceRoleChange() {
+	fmt.Printf("%s : Anouncing state change to: %d\n",n.id,n.role)
+	n.stateChange <- n.role
 }
 
 func (n *node) handleVoteFrom(v *VoteFrom) {
 
-	fmt.Printf("got vote from: %s\n",v.from)
+	fmt.Printf("%s: got vote from: %s\n",n.id,v.from)
 	if v.voteGranted {
 		majority := uint32((len(n.config.Peers()) / 2) + 1)
 		n.votesGot++
+		fmt.Printf("%s : votes got: %d\n",n.id,n.votesGot)
 		if n.votesGot >= majority {
 			// got elected
 			fmt.Println("setting as leader")
 			n.role = Leader
+			n.anounceRoleChange()
 		}
-		} else {
-			// vote denied update self
-		}
+	}
+	// else - what do we do??
+	
 	
 }

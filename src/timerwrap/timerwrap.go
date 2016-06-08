@@ -55,7 +55,7 @@ func (m *MockTimer) Stop() {
 }
 
 func (m *MockTimer) Tick() {
-	fmt.Println("tick")
+	fmt.Println("Mock timer - tick")
 	m.c <- time.Time{}
 }
 

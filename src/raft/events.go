@@ -12,6 +12,10 @@ type StartCandiate struct {
 type Quit struct {
 }
 
+type HigherTermDiscovered struct {
+	term uint64
+}
+
 type VoteFrom struct {
 	from string
 	voteGranted bool

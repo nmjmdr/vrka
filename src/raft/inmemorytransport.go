@@ -1,8 +1,6 @@
 package raft
 
 
-
-
 type inMemoryTransport struct {
 	n *node
 }
