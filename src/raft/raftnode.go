@@ -148,6 +148,7 @@ func (n *node) startAsFollower() {
 	// initialize
 	// set the role as Follower
 	n.role = Follower
+	fmt.Printf("%s: set as follower\n",n.id)
 	n.anounceRoleChange()
 	fmt.Println("Start Follower event received")
 	startElectionTimer(n)
@@ -206,7 +207,7 @@ func (n *node) dispatch(evt interface{}) {
 	case *HigherTermDiscovered:
 		{
 			if t.term > n.currentTerm {
-				fmt.Printf("%s: Higher term discovered",n.id)
+				fmt.Printf("%s: Higher term discovered\n",n.id)
 				// revert to follower
 				n.currentTerm = t.term
 				n.startAsFollower()			

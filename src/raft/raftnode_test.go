@@ -232,3 +232,62 @@ func Test_CandidateTimedout(t *testing.T) {
 	} 
 }
 
+
+func Test_CandidateHigherTerm(t *testing.T) {
+
+	// code this
+	numNodes := 3
+
+	timers := make([]timerwrap.TimerWrap,numNodes)
+	
+	
+	peers := make([]Peer,numNodes)
+	transport := newMockTransport()
+	wgs  := make([](*sync.WaitGroup),numNodes)
+		
+	
+	for i:=0;i<numNodes;i++ {
+		str := strconv.Itoa(i)
+		peers[i] =  Peer{Id:str,Address:""}
+		timers[i] = timerwrap.NewMockTimer()
+		wgs[i] = &sync.WaitGroup{}
+	}
+	
+
+	nodes := make([](*node),numNodes)
+
+
+	
+	for i:=0;i<numNodes;i++ {
+		str := strconv.Itoa(i)
+		nodes[i] = makeNewNode(str,timers[i],peers,transport)
+		vr := voteResponse{ termToUpdate:0,voteGranted:true,from:str }
+		if i == 2 {
+			vr.voteGranted = false
+			vr.termToUpdate = 2
+		}
+		transport.setResponse(str,vr,nil,nil)
+	}
+	
+	
+	for i:=0;i<numNodes;i++ {
+		go listenToStateChange(t,nodes[i],wgs[i],1)
+		waitForStart(nodes[i],wgs[i])
+	}
+	
+	mockTimer,_ := timers[0].(*timerwrap.MockTimer)
+
+	go listenToStateChange(t,nodes[0],wgs[0],2)
+	wgs[0].Add(2) 
+	mockTimer.Tick()
+	wgs[0].Wait()
+		
+
+	waitForStop(t,nodes[0],wgs[0])
+
+	if nodes[0].role != Follower {
+		t.Fatal("Should have been a follower")
+	}
+	
+}
+
