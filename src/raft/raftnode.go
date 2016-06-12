@@ -176,9 +176,8 @@ func (n *node) dispatch(evt interface{}) {
 				startElection(n)
 			} else if n.role == Candidate {
 				// did not get elected within the time, restart the election
+
 				fmt.Println("did not get elected, starting election again")
-				n.role = Follower
-				n.anounceRoleChange()
 				startElection(n)
 			} else {
 				panic("Got election anouncement while being a leader")
