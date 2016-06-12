@@ -153,6 +153,14 @@ func (n *node) startAsFollower() {
 	startElectionTimer(n)
 }
 
+func (n *node) restartElection() {
+	n.anounceRoleChange()
+	// start the election
+	// start Election timer
+	startElectionTimer(n)
+	startElection(n)
+}
+
 
 func (n *node) dispatch(evt interface{}) {
 	
@@ -171,14 +179,11 @@ func (n *node) dispatch(evt interface{}) {
 			if n.role == Follower {
 				fmt.Println("Changing to candidate and starting election")
 				n.role = Candidate
-				n.anounceRoleChange()
-				// start the election
-				startElection(n)
+				n.restartElection()
 			} else if n.role == Candidate {
 				// did not get elected within the time, restart the election
-
 				fmt.Println("did not get elected, starting election again")
-				startElection(n)
+				n.restartElection()
 			} else {
 				panic("Got election anouncement while being a leader")
 			}
@@ -194,7 +199,7 @@ func (n *node) dispatch(evt interface{}) {
 			} else if n.role == Candidate {
 				n.handleVoteFrom(t)
 			} else if n.role == Leader {
-				// check this
+				// delayed vote ignore
 			}
 		}
 

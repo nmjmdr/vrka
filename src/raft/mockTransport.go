@@ -23,8 +23,17 @@ func newMockTransport() *mockTransport {
 
 func (m *mockTransport) setResponse(id string,vr voteResponse,wg *sync.WaitGroup,err error) {
 	m.responseMap[id] = nodeResponse { vres : vr, err : err, wg : wg }
-	fmt.Println("Map here: ")
 	fmt.Println(m.responseMap)
+}
+
+func (m *mockTransport) releaseWait(id string) {
+	responseParams,ok := m.responseMap[id]
+
+	if !ok {
+		fmt.Println(m.responseMap)
+		panic("response for peer not found in map")
+	}
+	responseParams.wg.Done()
 }
 
 func (m *mockTransport) RequestForVote(vreq voteRequest,peer Peer) (voteResponse,error) {
@@ -39,7 +48,5 @@ func (m *mockTransport) RequestForVote(vreq voteRequest,peer Peer) (voteResponse
 	if responseParams.wg != nil {
 		responseParams.wg.Wait()
 	}
-	fmt.Print("Mock Transport, returning: ")
-	fmt.Println(responseParams.vres)
 	return responseParams.vres,responseParams.err	
 }
