@@ -125,9 +125,10 @@ func getNNodes(n int) ([](*node),map[string]timerwrap.TimerWrap) {
 
 	config := NewMockConfig(peers)
 
-	transport := newMockTransport()
-
+	
 	timers := make(map[string]timerwrap.TimerWrap)
+
+	transport := newMockTransport()
 	
 	for i :=0;i<n;i++ {
 		iStr := strconv.Itoa(i)
@@ -158,10 +159,8 @@ func Test_CandidateToLeaderNNodes(t *testing.T) {
 	for i := 1;i<numNodes;i++ {
 		iStr := strconv.Itoa(i)
 		mt,_ := nodes[i].transport.(*mockTransport)
-		mt.setResponse(iStr,voteResponse { voteGranted : true, from : iStr, termToUpdate : 0 }, 0, nil)
-	}
-
-	
+		mt.setResponse(iStr,voteResponse { voteGranted : true, from : iStr, termToUpdate : 0 }, nil, nil)
+	}	
 
 	wgs := make([]sync.WaitGroup,numNodes)
 
@@ -224,7 +223,7 @@ func Test_CandidteHigherTermDiscovered(t *testing.T) {
 			vote = true
 			termToUpdate = 0
 		}
-		mt.setResponse(iStr,voteResponse { voteGranted : vote, from : iStr, termToUpdate : termToUpdate }, 0, nil)
+		mt.setResponse(iStr,voteResponse { voteGranted : vote, from : iStr, termToUpdate : termToUpdate }, nil, nil)
 
 	}	
 
@@ -271,63 +270,4 @@ func Test_CandidteHigherTermDiscovered(t *testing.T) {
 	}
 	
 }
-
-func Test_DelayedVotes(t *testing.T) {
-
-	numNodes := 3
-	nodes,timers := getNNodes(numNodes)
-
-	// set transport responses for nodes
-	for i := 1;i<numNodes;i++ {
-		iStr := strconv.Itoa(i)
-		mt,_ := nodes[i].transport.(*mockTransport)
-		mt.setResponse(iStr,voteResponse { voteGranted : true, from : iStr, termToUpdate : 0}, time.Duration(100)*time.Millisecond, nil)
-
-	}	
-
-	wgs := make([]sync.WaitGroup,numNodes)
-
-	for i:=0;i<numNodes;i++ {
-		wgs[i] = sync.WaitGroup{}
-		go waitForStateChange(t,nodes[i],&wgs[i],1)
-	}
-
-	// start all
-	for i := 0; i<numNodes; i++ {
-		wgs[i].Add(1)
-		start(nodes[i])
-		wgs[i].Wait()
-	}
-
-	// node 0 transitions to candidate
-	
-	// wait for transition of node 0
-	go waitForStateChange(t,nodes[0],&wgs[0],1)
-
-	wgs[0].Add(1)
-	mockTimer0,_ := timers["0"].(*timerwrap.MockTimer)
-	fmt.Println("Tick to make node0 candidate")
-	mockTimer0.Tick()
-	wgs[0].Wait()
-	
-	
-	if(nodes[0].role != Candidate) {
-		t.Fatal("Should have been candidate")
-	}
-
-	go waitForStateChange(t,nodes[0],&wgs[0],1)
-	wgs[0].Add(1)
-	wgs[0].Wait()
-
-	if(nodes[0].role != Follower) {
-		t.Fatal("Node 0 should have been a follower")
-	}
-
-	
-}
-
-
-
-
-
 

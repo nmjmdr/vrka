@@ -1,14 +1,14 @@
 package raft
 
 import (
-	"time"
 	"fmt"
+	"sync"
 )
 
 type nodeResponse struct {
 	vres voteResponse
 	err error
-	delay time.Duration
+	wg *sync.WaitGroup
 }
 
 type mockTransport struct {	
@@ -21,17 +21,25 @@ func newMockTransport() *mockTransport {
 	return m
 }
 
-func (m *mockTransport) setResponse(id string,vr voteResponse,delay time.Duration,err error) {
-	m.responseMap[id] = nodeResponse { vres : vr, err : err, delay : delay }
+func (m *mockTransport) setResponse(id string,vr voteResponse,wg *sync.WaitGroup,err error) {
+	m.responseMap[id] = nodeResponse { vres : vr, err : err, wg : wg }
+	fmt.Println("Map here: ")
+	fmt.Println(m.responseMap)
 }
 
 func (m *mockTransport) RequestForVote(vreq voteRequest,peer Peer) (voteResponse,error) {
 
-	responseParams,_ := m.responseMap[peer.Id]
-	fmt.Printf("Delay is set to : %d\n",responseParams.delay)
-	time.Sleep(responseParams.delay)
+	responseParams,ok := m.responseMap[peer.Id]
+
+	if !ok {
+		fmt.Println(m.responseMap)
+		panic("response for peer not found in map")
+	}
+	
+	if responseParams.wg != nil {
+		responseParams.wg.Wait()
+	}
 	fmt.Print("Mock Transport, returning: ")
 	fmt.Println(responseParams.vres)
-	return responseParams.vres,responseParams.err
-	
+	return responseParams.vres,responseParams.err	
 }
