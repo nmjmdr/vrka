@@ -2,6 +2,7 @@ package raft
 
 import (
 	"fmt"
+	"timerwrap"
 )
 
 /*
@@ -25,8 +26,7 @@ func RequestForVote(n *node,vreq voteRequest,peer Peer) (voteResponse,error) {
 	// not already voted in the current term
 	// other conditons related to log - check it later
 
-	
-	if vreq.term < n.currentTerm {
+	if vreq.term <= n.currentTerm {
 		return voteResponse { voteGranted:false,from:n.id,termToUpdate:n.currentTerm},nil
 	}
 
@@ -49,11 +49,11 @@ func RequestForVote(n *node,vreq voteRequest,peer Peer) (voteResponse,error) {
 
 func (n *node) ifHigherTerm(term uint64) {
 	if term > n.currentTerm {
-		go func() {
+		go func(term uint64) {
 			higherTermEvent := new(HigherTermDiscovered)
 			higherTermEvent.term = term
 			n.eventCh <- higherTermEvent
-		}()
+		}(term)
 	}
 }
 
@@ -70,26 +70,122 @@ func stop(n *node){
 
 
 func startElectionTimer(n *node) {
-	n.electionTimer = n.getTimer(n.electionTimeout,n.id)
+
+	if n.electionTimer == nil {
+		n.electionTimer = n.getTimer(n.electionTimeout,n.id,ForElectionTimer)
+	} else {
+		n.electionTimer.Reset(n.electionTimeout)
+	}
 
 	fmt.Println("Will listen to election timer channel")
 	
-	go func() {
+	go func(timer timerwrap.TimerWrap) {
 		select {
-		case <-n.electionTimer.Channel():
+		case _,ok := <-timer.Channel():
+
+			if ok {
 			// election time out
 			fmt.Printf("%s: got tick on election timer channel\n",n.id)
-			n.eventCh <- new(ElectionAnounced)
+				n.eventCh <- new(ElectionAnounced)
+			}
+		}
+	}(n.electionTimer)
+}
+
+
+func AppendEntry(n *node,entry entry) (reply bool,termToUpdate uint64)  {
+
+
+	fmt.Printf("%s - got Append Entry from: %s\n",n.id,entry.from)
+	
+	if n.currentTerm > entry.term {
+		return false,n.currentTerm
+	}
+
+	n.ifHigherTerm(entry.term)
+
+	
+	go func() {
+		append := Append{ from : entry.from, term : entry.term }
+		fmt.Printf("%s - sending event Append, received from: %s\n",n.id,append.from)
+		n.eventCh <- &append
+	}()	
+
+	return true,entry.term
+}
+
+func stopHeartbeatTimer(n *node) {
+
+	fmt.Printf("%s - Stopping heartbeat timer\n",n.id)
+	if n.heartbeatTimer != nil {
+		n.heartbeatTimer.Stop()
+		fmt.Printf("%s - Stopped heartbeat timer\n",n.id)
+	}
+}
+
+func stopElectionTimer(n *node) {
+
+	fmt.Printf("%s - Stopping election timer\n",n.id)
+	if n.electionTimer != nil {
+		n.electionTimer.Stop()
+		fmt.Printf("%s - Stopped election timer\n",n.id)
+	}
+}
+
+
+
+func startHeartbeatTimer(n *node) {
+
+	if n.heartbeatTimer == nil {
+		n.heartbeatTimer = n.getTimer(n.heartbeatTimeout,n.id,ForHeartbeatTimer)
+	} else {
+		n.heartbeatTimer.Reset(n.heartbeatTimeout)
+	}
+	
+
+	fmt.Printf("%s Will listen to heartbeat timer channel",n.id)
+	
+	go func() {
+		select {
+		case _,ok := <-n.heartbeatTimer.Channel():
+			if ok {
+			fmt.Printf("%s: got tick on heartbeat timer channel\n",n.id)
+				n.eventCh <- new(TimeForHeartbeat)
+			}
 		}
 	}()
 }
 
+func sendHeartbeat(n *node) {
 
-func AppendEntry(n *node,entry entry) {
+	peers := n.config.Peers()
+	// send heartbeat to all peers
+	e := entry { from: n.id, term:n.currentTerm }
+	fmt.Printf("%s sending hertbeat with term %d\n",n.id,e.term)
 
-	n.ifHigherTerm(entry.term)	
+	fmt.Print("Peers: ")
+	fmt.Println(peers)
+	
+	for _,p := range peers {
+		if p.Id != n.id {
+
+			fmt.Printf("%s - will send heartbeat event to %s\n",n.id,p.Id)
+			
+			go func(p Peer,e entry) {
+				fmt.Printf("%s: sending heartbeat to peer : %s\n",n.id,p.Id)
+				// send heartbeat
+				reply,term := n.transport.AppendEntry(e,p)
+				fmt.Printf("%s : got reply to append entry from peer: %s, %t\n",n.id,p.Id,reply)
+				appendReply := AppendReply { reply:reply,term:term,from:p.Id }
+				go func(ar AppendReply){
+					fmt.Printf("%s - sending append entry response as event\n",n.id)
+					n.eventCh <- &ar
+				}(appendReply)
+			}(p,e)
+		}
+	}
+	fmt.Printf("%s - sent hertbeats\n",n.id)
 }
-
 
 func startElection(n *node) {
 	// request vote from all the peers in parallel
@@ -110,7 +206,7 @@ func startElection(n *node) {
 				continue
 		}
 		
-		go func (p Peer) {
+		go func (p Peer,vreq voteRequest) {
 			fmt.Printf("Requesting vote from: %s\n",p.Id)
 			vres,err := n.transport.RequestForVote(vreq,p)
 			if err == nil {
@@ -126,7 +222,7 @@ func startElection(n *node) {
 			} else {
 				// log the error?
 			}
-		}(p)
+		}(p,vreq)
 	}
 }
 

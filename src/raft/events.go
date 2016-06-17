@@ -21,3 +21,17 @@ type VoteFrom struct {
 	voteGranted bool
 	termToUpdate uint64
 }
+
+type Append struct {
+	from string
+	term uint64
+}
+
+type AppendReply struct {
+	reply bool
+	from string
+	term uint64
+}
+
+type TimeForHeartbeat struct {
+}

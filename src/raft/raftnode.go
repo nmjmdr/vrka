@@ -19,6 +19,12 @@ const (
 const MinElectionTimeout = 150
 const MaxElectionTimeout = 300
 
+const HeartbeatTimeout = 50
+
+const ForElectionTimer = "ForElectionTimer"
+const ForHeartbeatTimer = "ForHeartbeatTimer"
+
+
 const currentTermKey = "Current_Term"
 const votedForKey = "Voted_For_Key"
 
@@ -54,6 +60,7 @@ type node struct {
 	eventCh chan interface{}
 
 	electionTimer timerwrap.TimerWrap
+	heartbeatTimer timerwrap.TimerWrap
 
 	config Config
 	transport Transport
@@ -62,6 +69,7 @@ type node struct {
 	getTimer getTimerFn
 
 	electionTimeout time.Duration
+	heartbeatTimeout time.Duration
 
 	wg *sync.WaitGroup
 
@@ -69,7 +77,7 @@ type node struct {
 }
 
 
-type getTimerFn func(d time.Duration,nodeId string) timerwrap.TimerWrap
+type getTimerFn func(d time.Duration,nodeId string,forHint string) timerwrap.TimerWrap
 
 
 func newNode(id string,config Config,transport Transport,g getTimerFn,stable Stable) *node {
@@ -85,6 +93,7 @@ func newNode(id string,config Config,transport Transport,g getTimerFn,stable Sta
 	n.getTimer = g
 
 	n.electionTimeout = getRandomTimeout(MinElectionTimeout,MaxElectionTimeout)
+	n.heartbeatTimeout = time.Duration(HeartbeatTimeout * time.Millisecond)
 
 	n.wg = &sync.WaitGroup{}
 
@@ -147,19 +156,25 @@ func (n *node) loop() {
 func (n *node) startAsFollower() {
 	// initialize
 	// set the role as Follower
+	// are we transitioning from a leader role?
+
+	if n.role == Leader {
+		fmt.Printf("%s - Will stop heartbeat timer\n",n.id)
+		stopHeartbeatTimer(n)
+	}
+	
 	n.role = Follower
 	fmt.Printf("%s: set as follower\n",n.id)
-	n.anounceRoleChange()
-	fmt.Println("Start Follower event received")
 	startElectionTimer(n)
+	n.anounceRoleChange()
 }
 
-func (n *node) restartElection() {
-	n.anounceRoleChange()
+func (n *node) restartElection() {	
 	// start the election
 	// start Election timer
 	startElectionTimer(n)
 	startElection(n)
+	n.anounceRoleChange()
 }
 
 
@@ -176,14 +191,16 @@ func (n *node) dispatch(evt interface{}) {
 	case *ElectionAnounced:
 		{
 	
-			fmt.Println("Got election anounced event")		
+			fmt.Printf("%s - Got election anounced event\n",n.id)		
 			if n.role == Follower {
-				fmt.Println("Changing to candidate and starting election")
+				fmt.Printf("%s - Changing to candidate and starting election\n",n.id)
+				n.currentTerm = n.currentTerm + 1
 				n.role = Candidate
 				n.restartElection()
 			} else if n.role == Candidate {
 				// did not get elected within the time, restart the election
-				fmt.Println("did not get elected, starting election again")
+				fmt.Printf("%s - did not get elected, starting election again\n",n.id)
+				n.currentTerm = n.currentTerm + 1
 				n.restartElection()
 			} else {
 				panic("Got election anouncement while being a leader")
@@ -207,18 +224,70 @@ func (n *node) dispatch(evt interface{}) {
 	case *HigherTermDiscovered:
 		{
 			if t.term > n.currentTerm {
-				fmt.Printf("%s: Higher term discovered\n",n.id)
-				// revert to follower
-				n.currentTerm = t.term
-				n.startAsFollower()			
+				n.handleHigherTermDiscovered(t.term)		
 			}
 		}
+
+	case *Append:
+		{
+			if t.term > n.currentTerm {
+				n.handleHigherTermDiscovered(t.term)		
+			} else {
+				// we reset the election timer
+				fmt.Printf("%s - will reset election timer to: ",n.id)
+				fmt.Println(n.electionTimeout)
+				n.electionTimer.Reset(n.electionTimeout)
+				n.currentTerm = t.term
+			}
+		}
+	case *AppendReply:
+		{
+			fmt.Printf("%s - Append reply as event, with term : %d, current term is: %d\n",n.id,t.term,n.currentTerm)
+			if t.term > n.currentTerm {
+				n.handleHigherTermDiscovered(t.term)		
+			}
+			// if not perform other aspects of append reply
+		}
+
+	case *TimeForHeartbeat:
+		{			
+			if n.role == Leader {
+				fmt.Printf("%s node - time for heartbeat, will send out heartbeat\n",n.id)
+				sendHeartbeat(n)
+				startHeartbeatTimer(n)				
+			} else {
+				// good chance that the timer is stopped
+				// but we get the evet from the previous timer expiry
+				// ignore it
+				fmt.Printf("%s Heartbeat timer is active while the node is not a leader - ignoring it\n",n.id)
+				return
+			}
+			
+		}
 	}
+}
+
+func (n *node) handleHigherTermDiscovered(termToUpdate uint64) {
+	fmt.Printf("%s: Higher term discovered\n",n.id)
+	// revert to follower
+	n.currentTerm = termToUpdate
+	n.startAsFollower()
 }
 
 func (n *node) anounceRoleChange() {
 	fmt.Printf("%s : Anouncing state change to: %d\n",n.id,n.role)
 	n.stateChange <- n.role
+}
+
+func (n *node) startAsLeader() {
+	fmt.Printf("%s - setting as leader",n.id)
+	n.role = Leader
+	// stop election timer
+	stopElectionTimer(n)
+	// start leader heartbeat
+	sendHeartbeat(n)
+	startHeartbeatTimer(n)
+	n.anounceRoleChange()
 }
 
 func (n *node) handleVoteFrom(v *VoteFrom) {
@@ -230,12 +299,12 @@ func (n *node) handleVoteFrom(v *VoteFrom) {
 		fmt.Printf("%s : votes got: %d\n",n.id,n.votesGot)
 		if n.votesGot >= majority {
 			// got elected
-			fmt.Println("setting as leader")
-			n.role = Leader
-			n.anounceRoleChange()
+			n.startAsLeader()
 		}
 	}
-	// else - what do we do??
+	// else
+	// if a higher term has been discovered the event higher term discovered
+	// would already be placed 
 	
 	
 }
